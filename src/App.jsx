@@ -390,38 +390,16 @@ function useAnimLoop(cb, active=true){
 
 /* ── Canvas-based firework (much more performant & realistic) ── */
 function FireworkCanvas({fireworksList, canvasRef, speed=50}){
-  const cvRef = React.useRef(null);
-  // particles: [{x,y,vx,vy,life,maxLife,r,g,b,size,type,trail:[]}]
-  const particlesRef = React.useRef([]);
-  // rockets: [{x,y,vx,vy,targetX,targetY,exploded,palette,trail:[]}]
-  const rocketsRef   = React.useRef([]);
-  const prevFwRef    = React.useRef([]);
+  const cvRef       = React.useRef(null);
+  const particlesRef= React.useRef([]);
+  const rocketsRef  = React.useRef([]);
+  const prevFwRef   = React.useRef([]);
+  const speedRef    = React.useRef(speed); // always current — no stale closure
+  const lastTsRef   = React.useRef(null);
+  const rafRef      = React.useRef(null);
 
-  // Sync new fireworks → rockets
-  React.useEffect(()=>{
-    const prev = prevFwRef.current.map(f=>f.id);
-    fireworksList.forEach(fw=>{
-      if(!prev.includes(fw.id)){
-        const rect = canvasRef?.current?.getBoundingClientRect();
-        const startX = fw.x + rand(-30,30);
-        const startY = rect ? rect.bottom : window.innerHeight;
-        const pal    = fw.palette;
-        rocketsRef.current.push({
-          id: fw.id,
-          x: startX, y: startY,
-          targetX: fw.x, targetY: fw.y,
-          vx: 0, vy: 0,
-          palette: pal,
-          type: pick(EXPLOSION_TYPES),
-          scale: rand(0.5,1.9),
-          exploded: false,
-          trail: [],
-          age: 0,
-        });
-      }
-    });
-    prevFwRef.current = fireworksList;
-  },[fireworksList]);
+  // Keep speedRef in sync with prop
+  React.useEffect(()=>{ speedRef.current = speed; },[speed]);
 
   // Resize canvas
   React.useEffect(()=>{
@@ -435,258 +413,273 @@ function FireworkCanvas({fireworksList, canvasRef, speed=50}){
     return()=>window.removeEventListener("resize",resize);
   },[]);
 
-  useAnimLoop((elapsed, ts)=>{
-    const cv = cvRef.current;
-    if(!cv) return;
-    const ctx = cv.getContext("2d");
-    const W = cv.width, H = cv.height;
-    const dt = Math.min(elapsed/1000, 0.05); // cap dt
-
-    // Fade background (motion blur effect)
-    ctx.fillStyle = "rgba(0,0,0,0.18)";
-    ctx.fillRect(0,0,W,H);
-
-    const speedScale = speed/50;
-    const GRAVITY = 160 * speedScale; // scales with speed
-    const DRAG    = 1 - (0.012 * speedScale);
-    const WIND    = 8;   // px/s horizontal drift
-
-    // ── UPDATE & DRAW ROCKETS ──
-    rocketsRef.current = rocketsRef.current.filter(r => {
-      if(r.exploded) return false;
-      r.age += dt;
-
-      // Ease toward target
-      const dx = r.targetX - r.x;
-      const dy = r.targetY - r.y;
-      const dist = Math.sqrt(dx*dx+dy*dy);
-
-      if(dist < 8){
-        // EXPLODE!
-        explodeRocket(r, particlesRef.current, speed);
-        return false;
+  // Sync new fireworks → rockets
+  React.useEffect(()=>{
+    const prevIds = prevFwRef.current.map(f=>f.id);
+    fireworksList.forEach(fw=>{
+      if(!prevIds.includes(fw.id)){
+        const rect = canvasRef?.current?.getBoundingClientRect();
+        const startX = fw.x + rand(-30,30);
+        const startY = rect ? rect.bottom : window.innerHeight;
+        rocketsRef.current.push({
+          id:fw.id, x:startX, y:startY,
+          targetX:fw.x, targetY:fw.y,
+          palette:fw.palette,
+          type:pick(EXPLOSION_TYPES),
+          scale:rand(0.5,1.8),
+          exploded:false,
+          trail:[],
+        });
       }
-
-      const rocketSpeedMult = (speed/50); // speed prop: 1-100, 50=normal
-      const rocketSpeed = Math.min(dist * 4 * rocketSpeedMult, 900 * rocketSpeedMult);
-      r.vx += (dx/dist * rocketSpeed - r.vx) * 8 * dt;
-      r.vy += (dy/dist * rocketSpeed - r.vy) * 8 * dt;
-      r.x += r.vx * dt;
-      r.y += r.vy * dt;
-
-      // Trail
-      r.trail.push({x:r.x, y:r.y});
-      if(r.trail.length > 12) r.trail.shift();
-
-      // Draw trail
-      for(let i=0;i<r.trail.length;i++){
-        const alpha = i/r.trail.length;
-        const sz    = alpha * 3;
-        ctx.save();
-        ctx.globalAlpha = alpha*0.9;
-        ctx.fillStyle   = "#fff8cc";
-        ctx.shadowColor = "#fff8aa";
-        ctx.shadowBlur  = 8;
-        ctx.beginPath();
-        ctx.arc(r.trail[i].x, r.trail[i].y, sz, 0, Math.PI*2);
-        ctx.fill();
-        ctx.restore();
-      }
-
-      // Draw rocket head
-      ctx.save();
-      ctx.globalAlpha = 1;
-      ctx.fillStyle   = "#ffffff";
-      ctx.shadowColor = "#ffffaa";
-      ctx.shadowBlur  = 14;
-      ctx.beginPath();
-      ctx.arc(r.x, r.y, 3, 0, Math.PI*2);
-      ctx.fill();
-      ctx.restore();
-
-      return true;
     });
+    prevFwRef.current = fireworksList;
+  },[fireworksList]);
 
-    // ── UPDATE & DRAW PARTICLES ──
-    particlesRef.current = particlesRef.current.filter(p => {
-      p.life -= dt;
-      if(p.life <= 0) return false;
+  // Main animation loop
+  React.useEffect(()=>{
+    const MAX_PARTICLES = 600; // hard cap to prevent lag
 
-      // Physics
-      p.vx += WIND  * dt * 0.1;
-      p.vy += GRAVITY * dt;
-      p.vx *= DRAG; // air drag
-      p.vy *= DRAG;
-      p.x += p.vx * dt;
-      p.y += p.vy * dt;
+    const loop=(ts)=>{
+      rafRef.current = requestAnimationFrame(loop);
+      const cv=cvRef.current; if(!cv) return;
+      const ctx=cv.getContext("2d");
+      const W=cv.width, H=cv.height;
 
-      const lifeRatio = p.life / p.maxLife;
+      // dt capped at 50ms to avoid jumps
+      if(!lastTsRef.current) lastTsRef.current=ts;
+      const dt=Math.min((ts-lastTsRef.current)/1000, 0.05);
+      lastTsRef.current=ts;
 
-      // Color: starts white-hot, cools to palette color
-      let col;
-      if(p.rainbow){
-        const cidx = Math.floor(p.rainbowIdx * RAINBOW_COLS.length);
-        col = hexToRgb(RAINBOW_COLS[cidx%RAINBOW_COLS.length]);
-      } else {
-        col = {r:p.r, g:p.g, b:p.b};
-      }
+      const spd = speedRef.current; // always fresh
+      const speedScale = spd/50;
+      const GRAVITY = 160 * speedScale;
+      const DRAG    = Math.max(0.94, 1 - 0.015*speedScale);
 
-      // White-hot core at start
-      const heat = Math.max(0, lifeRatio - 0.7) / 0.3;
-      const r_  = Math.round(col.r + (255-col.r)*heat);
-      const g_  = Math.round(col.g + (255-col.g)*heat);
-      const b_  = Math.round(col.b + (255-col.b)*heat);
+      // Motion blur fade
+      ctx.fillStyle="rgba(0,0,0,0.2)";
+      ctx.fillRect(0,0,W,H);
 
-      const alpha = p.type==="glitter"
-        ? lifeRatio * rand(0.4,1.0)   // flicker
-        : Math.pow(lifeRatio,0.6);
+      // ── ROCKETS ──
+      rocketsRef.current = rocketsRef.current.filter(r=>{
+        if(r.exploded) return false;
+        const dx=r.targetX-r.x, dy=r.targetY-r.y;
+        const dist=Math.sqrt(dx*dx+dy*dy);
+        if(dist<10){
+          // Explode — but only if under particle cap
+          if(particlesRef.current.length < MAX_PARTICLES){
+            explodeRocket(r, particlesRef.current, spd);
+          }
+          return false;
+        }
+        const rspd=Math.min(dist*4*speedScale, 900*speedScale);
+        if(!r.vx) r.vx=0;
+        if(!r.vy) r.vy=0;
+        r.vx += (dx/dist*rspd - r.vx)*8*dt;
+        r.vy += (dy/dist*rspd - r.vy)*8*dt;
+        r.x += r.vx*dt;
+        r.y += r.vy*dt;
 
-      const size = p.size * (p.type==="tail" ? lifeRatio : 1);
+        // Trail
+        r.trail.push({x:r.x,y:r.y});
+        if(r.trail.length>10) r.trail.shift();
 
-      // Trail for main sparks
-      if(p.trail){
-        p.trail.push({x:p.x,y:p.y});
-        if(p.trail.length>6) p.trail.shift();
-        for(let i=0;i<p.trail.length;i++){
-          const ta = (i/p.trail.length) * alpha * 0.5;
+        for(let i=0;i<r.trail.length;i++){
+          const a=(i/r.trail.length)*0.85;
           ctx.save();
-          ctx.globalAlpha = ta;
-          ctx.fillStyle   = `rgb(${r_},${g_},${b_})`;
-          ctx.shadowColor = `rgba(${r_},${g_},${b_},0.6)`;
-          ctx.shadowBlur  = size*2;
+          ctx.globalAlpha=a;
+          ctx.fillStyle="#fff8cc";
+          ctx.shadowColor="#fffaaa";
+          ctx.shadowBlur=8;
           ctx.beginPath();
-          ctx.arc(p.trail[i].x, p.trail[i].y, size*0.5, 0, Math.PI*2);
+          ctx.arc(r.trail[i].x,r.trail[i].y,(i/r.trail.length)*2.5,0,Math.PI*2);
           ctx.fill();
           ctx.restore();
         }
+        // Head
+        ctx.save();
+        ctx.globalAlpha=1;
+        ctx.fillStyle="#ffffff";
+        ctx.shadowColor="#ffffaa";
+        ctx.shadowBlur=12;
+        ctx.beginPath();
+        ctx.arc(r.x,r.y,3,0,Math.PI*2);
+        ctx.fill();
+        ctx.restore();
+        return true;
+      });
+
+      // ── PARTICLES ──
+      // Limit total particles to MAX_PARTICLES
+      if(particlesRef.current.length > MAX_PARTICLES){
+        particlesRef.current = particlesRef.current.slice(-MAX_PARTICLES);
       }
 
-      // Draw particle
-      ctx.save();
-      ctx.globalAlpha = alpha;
-      ctx.fillStyle   = `rgb(${r_},${g_},${b_})`;
-      ctx.shadowColor = `rgba(${r_},${g_},${b_},0.8)`;
-      ctx.shadowBlur  = size * 4;
+      particlesRef.current = particlesRef.current.filter(p=>{
+        p.life -= dt;
+        if(p.life<=0) return false;
 
-      if(p.type==="star"){
-        drawStar(ctx, p.x, p.y, size*1.5, size*0.6, 5);
-      } else if(p.type==="glitter"){
-        ctx.shadowBlur = size*6;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, size, 0, Math.PI*2);
-        ctx.fill();
-      } else {
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, size, 0, Math.PI*2);
-        ctx.fill();
+        p.vx += 8*dt*0.1; // slight wind
+        p.vy += GRAVITY*dt;
+        p.vx *= DRAG;
+        p.vy *= DRAG;
+        p.x  += p.vx*dt;
+        p.y  += p.vy*dt;
+
+        const lr = p.life/p.maxLife;
+        // heat color
+        const heat=Math.max(0,lr-0.7)/0.3;
+        const r_=Math.round(p.r+(255-p.r)*heat);
+        const g_=Math.round(p.g+(255-p.g)*heat);
+        const b_=Math.round(p.b+(255-p.b)*heat);
+
+        let alpha;
+        if(p.type==="glitter") alpha=lr*(0.5+Math.random()*0.5);
+        else if(p.type==="flash") alpha=lr;
+        else alpha=Math.pow(lr,0.5);
+
+        if(alpha<=0) return true;
+
+        // Trail (only for main sparks, skip if too many particles)
+        if(p.trail && particlesRef.current.length < 400){
+          p.trail.push({x:p.x,y:p.y});
+          if(p.trail.length>5) p.trail.shift();
+          p.trail.forEach((pt,i)=>{
+            const ta=(i/p.trail.length)*alpha*0.45;
+            ctx.save();
+            ctx.globalAlpha=ta;
+            ctx.fillStyle=`rgb(${r_},${g_},${b_})`;
+            ctx.shadowColor=`rgba(${r_},${g_},${b_},.5)`;
+            ctx.shadowBlur=p.size*1.5;
+            ctx.beginPath();
+            ctx.arc(pt.x,pt.y,p.size*0.45,0,Math.PI*2);
+            ctx.fill();
+            ctx.restore();
+          });
+        }
+
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle   = `rgb(${r_},${g_},${b_})`;
+        ctx.shadowColor = `rgba(${r_},${g_},${b_},.85)`;
+        ctx.shadowBlur  = p.size*3.5;
+        if(p.type==="star"){
+          drawStar(ctx,p.x,p.y,p.size*1.4,p.size*0.55,5);
+        } else {
+          ctx.beginPath();
+          ctx.arc(p.x,p.y,p.size,0,Math.PI*2);
+          ctx.fill();
+        }
+        ctx.restore();
+        return true;
+      });
+
+      // Clear canvas if nothing active
+      if(rocketsRef.current.length===0 && particlesRef.current.length===0){
+        ctx.clearRect(0,0,W,H);
       }
-      ctx.restore();
+    };
 
-      return true;
-    });
-
-  }, true);
+    rafRef.current = requestAnimationFrame(loop);
+    return()=>cancelAnimationFrame(rafRef.current);
+  },[]); // run once — reads speed via ref
 
   return(
     <canvas ref={cvRef} style={{
       position:"fixed",top:0,left:0,
       width:"100%",height:"100%",
       pointerEvents:"none",zIndex:195,
-      display: fireworksList.length>0||particlesRef.current.length>0?"block":"none",
     }}/>
   );
 }
 
+
 /* ── Explode a rocket into particles ── */
 function explodeRocket(rocket, particles, speed=50){
   const {x,y,palette,type,scale} = rocket;
-  const count = Math.round(rand(40,80)*scale);
-  const speedMult = speed/50; // 1.0 = normal
-  const baseSpeed = rand(90,220)*scale*speedMult;
-  const maxLife   = rand(1.0,2.2) / speedMult; // slower = particles last longer
-  const pal = palette;
+  const speedMult = speed/50;
+  const count     = Math.round(rand(32,55)*scale);
+  const baseSpeed = rand(90,210)*scale*speedMult;
+  const maxLife   = rand(1.1,2.2)/speedMult;
 
   for(let i=0;i<count;i++){
     let vx,vy;
-
     if(type==="peony"||type==="chrysanthemum"){
-      const a = (i/count)*Math.PI*2 + rand(-0.1,0.1);
-      const s = baseSpeed * rand(0.7,1.3);
-      vx = Math.cos(a)*s; vy = Math.sin(a)*s;
+      const a=(i/count)*Math.PI*2+rand(-0.1,0.1);
+      const s=baseSpeed*rand(0.75,1.25);
+      vx=Math.cos(a)*s; vy=Math.sin(a)*s;
     } else if(type==="willow"){
-      const a = (i/count)*Math.PI*2 + rand(-0.12,0.12);
-      const s = baseSpeed * rand(0.5,1.0);
-      vx = Math.cos(a)*s*0.8; vy = Math.sin(a)*s*0.5 + rand(20,60);
+      const a=(i/count)*Math.PI*2+rand(-0.12,0.12);
+      const s=baseSpeed*rand(0.5,1.0);
+      vx=Math.cos(a)*s*0.8; vy=Math.sin(a)*s*0.45+rand(20,55);
     } else if(type==="ring"){
-      const a = (i/count)*Math.PI*2;
-      vx = Math.cos(a)*baseSpeed*0.9; vy = Math.sin(a)*baseSpeed*0.9;
+      const a=(i/count)*Math.PI*2;
+      vx=Math.cos(a)*baseSpeed*0.9; vy=Math.sin(a)*baseSpeed*0.9;
     } else if(type==="heart"){
-      const t = (i/count)*Math.PI*2;
-      const hx = 16*Math.pow(Math.sin(t),3);
-      const hy = -(13*Math.cos(t)-5*Math.cos(2*t)-2*Math.cos(3*t)-Math.cos(4*t));
-      const m  = Math.sqrt(hx*hx+hy*hy)||1;
-      vx = (hx/m)*baseSpeed*0.8; vy = (hy/m)*baseSpeed*0.8;
+      const t=(i/count)*Math.PI*2;
+      const hx=16*Math.pow(Math.sin(t),3);
+      const hy=-(13*Math.cos(t)-5*Math.cos(2*t)-2*Math.cos(3*t)-Math.cos(4*t));
+      const m=Math.sqrt(hx*hx+hy*hy)||1;
+      vx=(hx/m)*baseSpeed*0.78; vy=(hy/m)*baseSpeed*0.78;
     } else if(type==="crossette"){
-      const a = (i/count)*Math.PI*2 + rand(-0.2,0.2);
-      const s = baseSpeed * rand(0.4,1.5);
-      vx = Math.cos(a)*s; vy = Math.sin(a)*s;
+      const a=(i/count)*Math.PI*2+rand(-0.2,0.2);
+      vx=Math.cos(a)*baseSpeed*rand(0.4,1.5);
+      vy=Math.sin(a)*baseSpeed*rand(0.4,1.5);
     } else if(type==="palm"){
-      const a = (i/count)*Math.PI*2;
-      vx = Math.cos(a)*baseSpeed*rand(0.3,1.0);
-      vy = Math.sin(a)*baseSpeed*rand(0.3,1.0) + rand(30,80);
+      const a=(i/count)*Math.PI*2;
+      vx=Math.cos(a)*baseSpeed*rand(0.3,1.0);
+      vy=Math.sin(a)*baseSpeed*rand(0.3,1.0)+rand(25,70);
     } else if(type==="spider"){
-      const clusterAngle = Math.floor(i/(count/8)) * (Math.PI*2/8);
-      const a = clusterAngle + rand(-0.3,0.3);
-      const s = baseSpeed * rand(0.5,1.4);
-      vx = Math.cos(a)*s; vy = Math.sin(a)*s;
+      const cluster=Math.floor(i/(count/8))*(Math.PI*2/8);
+      const a=cluster+rand(-0.3,0.3);
+      vx=Math.cos(a)*baseSpeed*rand(0.5,1.4);
+      vy=Math.sin(a)*baseSpeed*rand(0.5,1.4);
     } else {
-      const a = rand(0,Math.PI*2);
-      vx = Math.cos(a)*baseSpeed*rand(0.2,1.2);
-      vy = Math.sin(a)*baseSpeed*rand(0.2,1.2);
+      const a=rand(0,Math.PI*2);
+      vx=Math.cos(a)*baseSpeed*rand(0.2,1.2);
+      vy=Math.sin(a)*baseSpeed*rand(0.2,1.2);
     }
 
-    const col = hexToRgb(i%7===0 ? pal.core : i%3===0 ? pal.mid : pal.outer);
-    const isRainbow = !!pal.rainbow;
+    const col      = hexToRgb(i%6===0?palette.core:i%3===0?palette.mid:palette.outer);
+    const isRainbow= !!palette.rainbow;
+    const pType    = isRainbow?"glitter":(i%4===0?"star":"spark");
 
     particles.push({
-      x, y, vx, vy,
-      life: maxLife * rand(0.6,1.4),
-      maxLife,
-      r: col.r, g: col.g, b: col.b,
-      size: rand(1.5,4)*Math.sqrt(scale),
-      type: isRainbow ? "glitter" : (i%5===0?"star":"spark"),
-      rainbow: isRainbow,
-      rainbowIdx: i/count,
-      trail: [],
+      x,y,vx,vy,
+      life:maxLife*rand(0.6,1.4), maxLife,
+      r:col.r,g:col.g,b:col.b,
+      size:rand(1.8,4.8)*Math.sqrt(scale),
+      type:pType, rainbow:isRainbow,
+      rainbowIdx:i/count, trail:[],
     });
   }
 
-  // Add glitter sparks (chrysanthemum / peony)
+  // Glitter sparks for chrysanthemum / peony
   if(type==="chrysanthemum"||type==="peony"){
-    for(let i=0;i<Math.round(30*scale);i++){
-      const a = rand(0,Math.PI*2);
-      const s = rand(20,80)*scale;
-      const col = hexToRgb(pal.mid);
+    for(let i=0;i<Math.round(16*scale);i++){
+      const a=rand(0,Math.PI*2);
+      const s=rand(20,70)*scale*speedMult;
+      const col=hexToRgb(palette.mid);
       particles.push({
-        x:x+rand(-15,15), y:y+rand(-15,15),
+        x:x+rand(-14,14), y:y+rand(-14,14),
         vx:Math.cos(a)*s, vy:Math.sin(a)*s,
-        life:rand(0.5,1.2)/speedMult, maxLife:1.0/speedMult,
-        r:col.r, g:col.g, b:col.b,
-        size:rand(1,3)*Math.sqrt(scale),
+        life:rand(0.4,1.0)/speedMult, maxLife:0.8/speedMult,
+        r:col.r,g:col.g,b:col.b,
+        size:rand(1,2.5)*Math.sqrt(scale),
         type:"glitter", rainbow:false, trail:[],
       });
     }
   }
 
-  // Flash burst
+  // Central flash
   particles.push({
     x,y,vx:0,vy:0,
-    life:0.15,maxLife:0.15,
+    life:0.18,maxLife:0.18,
     r:255,g:255,b:255,
     size:30*scale,
     type:"flash",rainbow:false,trail:[],
   });
 }
+
 
 /* ── helpers ── */
 function hexToRgb(hex){
@@ -786,7 +779,7 @@ export default function App(){
     addFw(clientX,clientY);
 
     // 0-2 extra rockets
-    const extraCount=Math.floor(rand(0,3));
+    const extraCount=Math.floor(rand(0,2)); // max 1 extra rocket
     Array.from({length:extraCount}).forEach((_,i)=>{
       setTimeout(()=>{
         addFw(clientX+rand(-130,130), clientY+rand(-90,90));
