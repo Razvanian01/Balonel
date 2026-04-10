@@ -750,19 +750,44 @@ export default function App(){
 
   // ── FULLSCREEN LOGIC ──
   const toggleFullscreen = useCallback(()=>{
-    if(!document.fullscreenElement){
-      document.documentElement.requestFullscreen?.();
-      setIsFullscreen(true);
+    const el = document.documentElement;
+    const isFs = !!(
+      document.fullscreenElement ||
+      document.webkitFullscreenElement ||
+      document.mozFullScreenElement
+    );
+    if(!isFs){
+      // Enter fullscreen — try all vendor prefixes
+      if(el.requestFullscreen)           el.requestFullscreen();
+      else if(el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+      else if(el.mozRequestFullScreen)    el.mozRequestFullScreen();
+      else if(el.msRequestFullscreen)     el.msRequestFullscreen();
     } else {
-      document.exitFullscreen?.();
-      setIsFullscreen(false);
+      // Exit fullscreen — try all vendor prefixes
+      if(document.exitFullscreen)            document.exitFullscreen();
+      else if(document.webkitExitFullscreen) document.webkitExitFullscreen();
+      else if(document.mozCancelFullScreen)  document.mozCancelFullScreen();
+      else if(document.msExitFullscreen)     document.msExitFullscreen();
     }
   },[]);
 
   useEffect(()=>{
-    const handler=()=>setIsFullscreen(!!document.fullscreenElement);
+    const handler=()=>{
+      const isFs=!!(
+        document.fullscreenElement||
+        document.webkitFullscreenElement||
+        document.mozFullScreenElement
+      );
+      setIsFullscreen(isFs);
+    };
     document.addEventListener("fullscreenchange",handler);
-    return()=>document.removeEventListener("fullscreenchange",handler);
+    document.addEventListener("webkitfullscreenchange",handler);
+    document.addEventListener("mozfullscreenchange",handler);
+    return()=>{
+      document.removeEventListener("fullscreenchange",handler);
+      document.removeEventListener("webkitfullscreenchange",handler);
+      document.removeEventListener("mozfullscreenchange",handler);
+    };
   },[]);
 
   // ── FIREWORKS LOGIC ──
@@ -1081,12 +1106,16 @@ export default function App(){
         onClick={toggleFullscreen}
         title={isFullscreen?"Ieși din fullscreen":"Fullscreen"}
         style={{
-          position:"fixed",top:14,right:14,zIndex:10000,
-          width:44,height:44,borderRadius:14,border:"none",cursor:"pointer",
-          background:"rgba(255,255,255,0.88)",backdropFilter:"blur(12px)",
-          boxShadow:"0 4px 16px rgba(0,0,0,0.15)",
-          fontSize:20,display:"flex",alignItems:"center",justifyContent:"center",
-          transition:"all .2s",
+          position:"fixed",top:12,right:12,zIndex:10000,
+          width:48,height:48,borderRadius:14,border:"none",cursor:"pointer",
+          background:isFullscreen
+            ?"linear-gradient(135deg,#ff6b9d,#ff8e53)"
+            :"rgba(255,255,255,0.92)",
+          backdropFilter:"blur(12px)",
+          boxShadow:`0 4px 18px ${isFullscreen?"rgba(255,107,157,0.4)":"rgba(0,0,0,0.18)"}`,
+          fontSize:22,display:"flex",alignItems:"center",justifyContent:"center",
+          transition:"all .25s",
+          color:isFullscreen?"#fff":"#333",
         }}
       >{isFullscreen?"🗗":"⛶"}</button>
 
