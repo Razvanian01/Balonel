@@ -350,33 +350,69 @@ function CelebrateRain({type}){
 ══════════════════════════════════════════════════════ */
 
 /* ══════════════════════════════════════════════════════
-   FIREWORK PARTICLE
+   FIREWORK SYSTEM — multiple types
 ══════════════════════════════════════════════════════ */
-const FW_COLORS = ["#ff4d6d","#ffd166","#4895ef","#52b788","#c77dff","#ff6eb4","#f77f00","#00c9d4","#fff"];
-const FW_EMOJIS = ["✨","⭐","💫","🌟","❤️","🧡","💛","💚","💙","💜","🎆","🎇","🌸","🎊","🎉"];
+const FW_COLORS = ["#ff4d6d","#ffd166","#4895ef","#52b788","#c77dff","#ff6eb4","#f77f00","#00c9d4","#fff","#ff9f1c","#e9ff70"];
+
+// Type definitions
+const FW_TYPES = [
+  // 0: Classic burst — round explosion
+  { name:"classic",   count:[14,22], spread:1.0, speedMin:55, speedMax:150, duration:900,  emojis:["✨","⭐","💫","🌟","🔥","⚡"] },
+  // 1: Heart burst
+  { name:"heart",     count:[12,18], spread:1.0, speedMin:50, speedMax:130, duration:1000, emojis:["❤️","🧡","💛","💚","💙","💜","🩷","💕","💗"] },
+  // 2: Flower burst
+  { name:"flower",    count:[10,16], spread:1.0, speedMin:45, speedMax:120, duration:1100, emojis:["🌸","🌼","🌺","🌹","🌷","🌻","🪷"] },
+  // 3: Sparkle — many small particles going up
+  { name:"sparkle",   count:[20,30], spread:0.6, speedMin:30, speedMax:100, duration:800,  emojis:["✨","💫","⭐","🌟"] },
+  // 4: Rainbow ring — particles in a circle
+  { name:"rainbow",   count:[16,20], spread:1.0, speedMin:80, speedMax:80,  duration:1000, emojis:["🔴","🟠","🟡","🟢","🔵","🟣","⭐"] },
+  // 5: Stars
+  { name:"stars",     count:[12,20], spread:0.8, speedMin:60, speedMax:140, duration:950,  emojis:["⭐","🌟","💫","✨","🌠"] },
+  // 6: Confetti
+  { name:"confetti",  count:[18,28], spread:1.2, speedMin:40, speedMax:130, duration:1100, emojis:["🎊","🎉","🎈","🎀","🎆","🎇"] },
+  // 7: Emoji party
+  { name:"party",     count:[10,16], spread:1.0, speedMin:50, speedMax:120, duration:1000, emojis:["😊","🥳","🎉","🎊","🥰","😍","🤩","👏"] },
+];
 
 function FireworkBurst({x,y,id}){
-  const particles = useMemo(()=>Array.from({length:18},(_,i)=>{
-    const angle=(i/18)*Math.PI*2;
-    const speed=rand(60,160);
+  const type = useMemo(()=>pick(FW_TYPES),[]);
+  const scale = useMemo(()=>rand(0.5,1.8),[]);  // size variation small/large
+  const count = useMemo(()=>Math.floor(rand(type.count[0],type.count[1])),[type]);
+  const flashSize = Math.round(40*scale);
+
+  const particles = useMemo(()=>Array.from({length:count},(_,i)=>{
+    let angle;
+    if(type.name==="rainbow"){
+      // perfect ring
+      angle = (i/count)*Math.PI*2;
+    } else {
+      // random spread
+      angle = rand(0, Math.PI*2);
+    }
+    const speed = rand(type.speedMin, type.speedMax) * scale;
+    const spread = type.spread;
     return{
-      dx:Math.cos(angle)*speed, dy:Math.sin(angle)*speed,
-      color:pick(FW_COLORS), emoji:pick(FW_EMOJIS),
-      size:rand(14,26), delay:i*15,
+      dx: Math.cos(angle)*speed*spread,
+      dy: Math.sin(angle)*speed*spread,
+      emoji: pick(type.emojis),
+      size: Math.round(rand(10,22)*scale),
+      delay: i*18,
     };
-  }),[]);
+  }),[count,type,scale]);
+
   return(
     <>
       {/* Central flash */}
       <div style={{position:"fixed",left:x,top:y,transform:"translate(-50%,-50%)",
-        width:60,height:60,borderRadius:"50%",
-        background:"radial-gradient(circle,rgba(255,255,255,0.95),rgba(255,255,200,0.6),transparent)",
+        width:flashSize,height:flashSize,borderRadius:"50%",
+        background:"radial-gradient(circle,rgba(255,255,255,0.98),rgba(255,255,220,0.7),transparent)",
         animation:"fw-flash .4s ease-out both",pointerEvents:"none",zIndex:200}}/>
+      {/* Particles */}
       {particles.map((p,i)=>(
         <div key={i} style={{
           position:"fixed",left:x,top:y,
           fontSize:p.size,pointerEvents:"none",zIndex:199,
-          animation:`fw-particle .9s ease-out ${p.delay}ms both`,
+          animation:`fw-particle ${type.duration}ms ease-out ${p.delay}ms both`,
           "--dx":`${p.dx}px`,"--dy":`${p.dy}px`,
         }}>{p.emoji}</div>
       ))}
@@ -384,24 +420,7 @@ function FireworkBurst({x,y,id}){
   );
 }
 
-/* ══════════════════════════════════════════════════════
-   HEART CURSOR TRAIL
-══════════════════════════════════════════════════════ */
-function HeartTrail({hearts}){
-  return(
-    <>
-      {hearts.map(h=>(
-        <div key={h.id} style={{
-          position:"fixed",left:h.x,top:h.y,
-          fontSize:h.size,pointerEvents:"none",zIndex:9999,
-          transform:"translate(-50%,-50%)",
-          animation:"heart-fade .8s ease-out both",
-          animationDelay:`${h.delay}ms`,
-        }}>{h.emoji}</div>
-      ))}
-    </>
-  );
-}
+
 
 export default function App(){
   const [game,setGame]             = useState("free");
@@ -430,7 +449,6 @@ export default function App(){
   const [showNames,setShowNames]   = useState(false);
   const [isFullscreen,setIsFullscreen] = useState(false);
   const [fireworks,setFireworks]   = useState([]);
-  const [mouseHearts,setMouseHearts] = useState([]); // OFF by default
 
   const areaRef  = useRef(null);
   const frameRef = useRef(null);
@@ -464,49 +482,27 @@ export default function App(){
 
   // ── FIREWORKS LOGIC ──
   const spawnFirework = useCallback((clientX, clientY)=>{
+    // Main burst
     const id=uid();
     setFireworks(p=>[...p,{id,x:clientX,y:clientY}]);
-    // play sparkle sound
     if(soundOn&&audioRef.current) audioRef.current.star?.();
-    setTimeout(()=>setFireworks(p=>p.filter(f=>f.id!==id)),1100);
+    setTimeout(()=>setFireworks(p=>p.filter(f=>f.id!==id)),1200);
+
+    // 1-3 secondary smaller bursts with slight delay
+    const extraCount = Math.floor(rand(1,4));
+    Array.from({length:extraCount}).forEach((_,i)=>{
+      const delay = 120 + i*180;
+      const extraId = uid();
+      const ox = clientX + rand(-80,80);
+      const oy = clientY + rand(-80,80);
+      setTimeout(()=>{
+        setFireworks(p=>[...p,{id:extraId,x:ox,y:oy}]);
+        setTimeout(()=>setFireworks(p=>p.filter(f=>f.id!==extraId)),1200);
+      }, delay);
+    });
   },[soundOn]);
 
-  // ── HEART CURSOR TRAIL ──
-  const heartEmojis=["❤️","🧡","💛","💚","💙","💜","🩷","🤍","💕","💗"];
-  useEffect(()=>{
-    let lastMove=0;
-    const onMove=(e)=>{
-      const now=Date.now();
-      if(now-lastMove<60) return; // throttle
-      lastMove=now;
-      const id=uid();
-      const heart={id,x:e.clientX,y:e.clientY,
-        size:rand(14,24),delay:0,
-        emoji:pick(heartEmojis)};
-      setMouseHearts(p=>[...p.slice(-12),heart]);
-      setTimeout(()=>setMouseHearts(p=>p.filter(h=>h.id!==id)),900);
-    };
-    window.addEventListener("mousemove",onMove);
-    return()=>window.removeEventListener("mousemove",onMove);
-  },[]);
 
-  // ── SPACE KEY: spawn in free game OR fireworks game ──
-  useEffect(()=>{
-    const onKey=(e)=>{
-      if(e.code!=="Space") return;
-      e.preventDefault();
-      if(game==="fireworks"){
-        // random position on screen
-        spawnFirework(rand(100,window.innerWidth-100), rand(100,window.innerHeight-100));
-      } else if(game==="free"){
-        const rect=areaRef.current?.getBoundingClientRect();
-        if(!rect) return;
-        spawnAt(rect.left+rand(80,rect.width-80), rect.top+rand(rect.height*0.2,rect.height-100));
-      }
-    };
-    window.addEventListener("keydown",onKey);
-    return()=>window.removeEventListener("keydown",onKey);
-  },[game,spawnFirework,spawnAt]);
 
   // Inject mobile viewport meta for tablet/phone
   useEffect(()=>{
@@ -575,6 +571,23 @@ export default function App(){
     const newItems=Array.from({length:n},()=>makeItem(rand(85,rect.width-85),rand(rect.height*0.5,rect.height-105),game,diff)).filter(Boolean);
     setItems(p=>[...p,...newItems]);
   },[game,diff]);
+
+  // ── SPACE KEY: spawn in free game OR fireworks game ──
+  useEffect(()=>{
+    const onKey=(e)=>{
+      if(e.code!=="Space") return;
+      e.preventDefault();
+      if(game==="fireworks"){
+        spawnFirework(rand(100,window.innerWidth-100), rand(100,window.innerHeight-100));
+      } else if(game==="free"){
+        const rect=areaRef.current?.getBoundingClientRect();
+        if(!rect) return;
+        spawnAt(rect.left+rand(80,rect.width-80), rect.top+rand(rect.height*0.2,rect.height-100));
+      }
+    };
+    window.addEventListener("keydown",onKey);
+    return()=>window.removeEventListener("keydown",onKey);
+  },[game,spawnFirework,spawnAt]);
 
   useEffect(()=>{ spawnRandom(game==="speed"?6:4); },[game,diff]);
 
@@ -740,7 +753,6 @@ export default function App(){
         @keyframes hero-pulse{0%,100%{opacity:.6;transform:scale(1)}50%{opacity:.95;transform:scale(1.1)}}
         @keyframes celebrate-fall{0%{opacity:1;transform:translateY(0) rotate(0deg)}100%{opacity:0;transform:translateY(115vh) rotate(360deg)}}
         @keyframes moon-glow{0%,100%{box-shadow:0 0 20px #fff4,0 0 40px #aaf4}50%{box-shadow:0 0 30px #fff6,0 0 60px #aaf6}}
-        @keyframes twinkle{0%,100%{opacity:.3;transform:scale(.7)}50%{opacity:1;transform:scale(1.3)}}
         .item-in{animation:item-in .38s cubic-bezier(.34,1.56,.64,1) both}
         .msg-in{animation:msg-in .3s ease-out}
 
@@ -748,12 +760,8 @@ export default function App(){
         @keyframes fw-flash{0%{opacity:1;transform:translate(-50%,-50%) scale(.2)}50%{opacity:1;transform:translate(-50%,-50%) scale(1.4)}100%{opacity:0;transform:translate(-50%,-50%) scale(2)}}
         @keyframes fw-particle{0%{opacity:1;transform:translate(0,0) scale(1)}100%{opacity:0;transform:translate(var(--dx),var(--dy)) scale(.3)}}
 
-        /* Heart cursor trail */
-        @keyframes heart-fade{0%{opacity:1;transform:translate(-50%,-50%) scale(1)}100%{opacity:0;transform:translate(-50%,-60%) scale(0.4)}}
+        /* Heart cursor trail — handled by JS physics now */
 
-        /* Custom cursor — hide default, show heart */
-        .game-cursor-active{cursor:none!important;}
-        .game-cursor-active *{cursor:none!important;}
 
         /* Fullscreen button pulse */
         @keyframes fs-pulse{0%,100%{opacity:.85}50%{opacity:1;transform:scale(1.05)}}
@@ -776,9 +784,6 @@ export default function App(){
         }
       `}</style>
 
-      {/* Heart cursor trail */}
-      <HeartTrail hearts={mouseHearts}/>
-
       {/* Fireworks overlay */}
       {fireworks.map(f=><FireworkBurst key={f.id} x={f.x} y={f.y} id={f.id}/>)}
 
@@ -798,7 +803,7 @@ export default function App(){
 
       <div style={{display:"flex",minHeight:"100dvh",minHeight:"100vh",padding:12,gap:12,height:"100dvh",height:"100vh",overflow:"hidden",
         background:pulse?"radial-gradient(circle at 50% 50%,#fffde7,#ffefc0 50%,#f0f7ff)":"linear-gradient(160deg,#f0f7ff,#e8f4ff 40%,#f0fff4)",
-        transition:"background .5s",fontFamily:"'Nunito',sans-serif",cursor:"none"}} className="app-layout game-cursor-active">
+        transition:"background .5s",fontFamily:"'Nunito',sans-serif"}} className="app-layout">
 
         {/* ─── SIDEBAR ─── */}
         <div style={{flexShrink:0,width:sideOpen?304:68,transition:"width .35s cubic-bezier(.34,1.2,.64,1)",
@@ -956,14 +961,6 @@ export default function App(){
                 boxShadow:"0 0 20px rgba(255,240,180,.5)"}}/>
             )}
 
-            {/* Stars for fireworks night sky */}
-            {game==="fireworks"&&Array.from({length:40}).map((_,i)=>(
-              <div key={i} style={{position:"absolute",
-                left:`${rand(1,99)}%`,top:`${rand(1,70)}%`,
-                fontSize:rand(6,14),pointerEvents:"none",opacity:rand(0.3,0.9),
-                animation:`twinkle ${rand(1.5,4)}s ease-in-out infinite`,
-                animationDelay:`${rand(0,3)}s`,color:"#fff"}}>★</div>
-            ))}
 
             {/* clouds (day only) */}
             {!isNight&&[{l:"6%",t:"8%",s:1.1,a:"float-c",d:9},{l:"38%",t:"4%",s:.78,a:"float-c2",d:12},{l:"66%",t:"11%",s:1,a:"float-c",d:10}].map((c,i)=>(
