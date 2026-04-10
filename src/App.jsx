@@ -1,0 +1,885 @@
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+/* ══════════════════════════════════════════════════════
+   DIFFICULTY
+══════════════════════════════════════════════════════ */
+const DIFFICULTY = {
+  easy:   { label:"2-3 ani", speed:[12,20], spawnMs:2000, life:999999, itemSize:[92,118], count:[2,3], streakNeeded:2, emoji:"🌸" },
+  medium: { label:"4-5 ani", speed:[24,38], spawnMs:1300, life:999999, itemSize:[76,102], count:[3,5], streakNeeded:3, emoji:"⭐" },
+  hard:   { label:"6+ ani",  speed:[40,62], spawnMs:850,  life:7000,   itemSize:[60,88],  count:[4,6], streakNeeded:4, emoji:"🔥" },
+};
+
+/* ══════════════════════════════════════════════════════
+   COLORS
+══════════════════════════════════════════════════════ */
+const COLOR_MAP = {
+  red:    { name:"Roșu",       hex:"#ff4d6d", glow:"#ff4d6d55", grad:"radial-gradient(circle at 30% 25%,#ffb3c1,#ff4d6d 55%,#c9184a)" },
+  blue:   { name:"Albastru",   hex:"#4895ef", glow:"#4895ef55", grad:"radial-gradient(circle at 30% 25%,#90e0ef,#4895ef 55%,#3f37c9)" },
+  green:  { name:"Verde",      hex:"#52b788", glow:"#52b78855", grad:"radial-gradient(circle at 30% 25%,#b7e4c7,#52b788 55%,#1b4332)" },
+  yellow: { name:"Galben",     hex:"#ffd166", glow:"#ffd16655", grad:"radial-gradient(circle at 30% 25%,#fff3b0,#ffd166 55%,#ef8c14)" },
+  purple: { name:"Mov",        hex:"#c77dff", glow:"#c77dff55", grad:"radial-gradient(circle at 30% 25%,#e0c3fc,#c77dff 55%,#7b2d8b)" },
+  orange: { name:"Portocaliu", hex:"#f77f00", glow:"#f77f0055", grad:"radial-gradient(circle at 30% 25%,#ffc300,#f77f00 55%,#d62828)" },
+  pink:   { name:"Roz",        hex:"#ff6eb4", glow:"#ff6eb455", grad:"radial-gradient(circle at 30% 25%,#ffd6e8,#ff6eb4 55%,#c9006b)" },
+  cyan:   { name:"Turcoaz",    hex:"#00c9d4", glow:"#00c9d455", grad:"radial-gradient(circle at 30% 25%,#b2f5f8,#00c9d4 55%,#006b73)" },
+};
+const COLORS = Object.keys(COLOR_MAP);
+const SHAPES = ["circle","square","triangle","star","heart","diamond"];
+
+/* ══════════════════════════════════════════════════════
+   STORY WORLDS — exact characters as chosen
+══════════════════════════════════════════════════════ */
+const WORLDS = {
+  bambi: {
+    id:"bambi", title:"Lumea lui Bambi", emoji:"🦌", color:"#f5c842",
+    sky:"linear-gradient(180deg,#87ceeb 0%,#b0e0ff 22%,#c8f0e0 50%,#d4f7c9 72%,#8bc34a 100%)",
+    ground:"🌿🍃🌸🌼🍄🌿🌸🍃🌼🌺",
+    celebrate:"leaf", showStars:false,
+    // HEROES = targets to find
+    heroes:[
+      { emoji:"🦌", name:"Bambi",      bg:"radial-gradient(circle at 30% 25%,#ffe8b0,#f5c842 55%,#b8860b)", border:"#f5c842", glow:"rgba(245,200,66,.5)",  sound:"bambi", msg:"🦌 Bambi sare fericit!", sparkle:"🍃" },
+      { emoji:"🦡", name:"Flower",     bg:"radial-gradient(circle at 30% 25%,#d4f7c9,#52b788 55%,#1b4332)", border:"#52b788", glow:"rgba(82,183,136,.5)", sound:"hmm",   msg:"🦡 Flower e timid!", sparkle:"🌸" },
+    ],
+    // DISTRACTORS = background items (cannot be selected as correct)
+    distractors:[
+      {emoji:"🐰",name:"Iepuraș"},{emoji:"🦔",name:"Arici"},{emoji:"🦌",name:"Cerb mare"},
+      {emoji:"🐝",name:"Albinuță"},{emoji:"🌲",name:"Copac"},{emoji:"🌺",name:"Floare"},
+      {emoji:"🐦",name:"Pasăre"},
+    ],
+  },
+
+  elsa: {
+    id:"elsa", title:"Magia Elsei", emoji:"❄️", color:"#6ec6f0",
+    sky:"linear-gradient(180deg,#0d1b4b 0%,#1a3a6b 25%,#2e6da4 50%,#5ea8d8 75%,#cde8f8 100%)",
+    ground:"❄️⛄🌨️💎❄️⛄🌨️❄️💎⛄",
+    celebrate:"snow", showStars:false,
+    heroes:[
+      { emoji:"🧙‍♀️", name:"Elsa",    bg:"radial-gradient(circle at 30% 25%,#dff4ff,#6ec6f0 55%,#1565c0)", border:"#6ec6f0", glow:"rgba(110,198,240,.6)", sound:"elsa", msg:"🧙‍♀️ Elsa îți trimite magie!", sparkle:"❄️" },
+      { emoji:"👩‍🦰", name:"Anna",    bg:"radial-gradient(circle at 30% 25%,#ffd6e8,#ff6eb4 55%,#c9006b)", border:"#ff6eb4", glow:"rgba(255,110,180,.5)", sound:"star", msg:"👩‍🦰 Anna e veselă!", sparkle:"💕" },
+      { emoji:"🦌",   name:"Sven",    bg:"radial-gradient(circle at 30% 25%,#ffe8b0,#f5c842 55%,#b8860b)", border:"#f5c842", glow:"rgba(245,200,66,.5)", sound:"bambi",msg:"🦌 Sven galopează!", sparkle:"🍃" },
+      { emoji:"⛄",   name:"Olaf",    bg:"radial-gradient(circle at 30% 25%,#f0f8ff,#c8e6f0 55%,#5ea8d8)", border:"#c8e6f0", glow:"rgba(200,230,240,.6)", sound:"pop", msg:"⛄ Olaf iubește vara!", sparkle:"☃️" },
+      { emoji:"🏔️",  name:"Kristoff",bg:"radial-gradient(circle at 30% 25%,#d4c5a0,#a0856a 55%,#5d4037)", border:"#a0856a", glow:"rgba(160,133,106,.5)", sound:"grr", msg:"🏔️ Kristoff e curajos!", sparkle:"⛏️" },
+      { emoji:"🤴",   name:"Hans",    bg:"radial-gradient(circle at 30% 25%,#d0e8ff,#4895ef 55%,#1565c0)", border:"#4895ef", glow:"rgba(72,149,239,.5)",  sound:"good", msg:"🤴 Hans apare!", sparkle:"⚔️" },
+      { emoji:"👴",   name:"Ducele",  bg:"radial-gradient(circle at 30% 25%,#ffe4b0,#f77f00 55%,#d62828)", border:"#f77f00", glow:"rgba(247,127,0,.5)",   sound:"bad",  msg:"👴 Ducele de Weselton!", sparkle:"🎩" },
+      { emoji:"🧌",   name:"Pabbie",  bg:"radial-gradient(circle at 30% 25%,#c8e6c9,#52b788 55%,#1b4332)", border:"#52b788", glow:"rgba(82,183,136,.5)", sound:"magic",msg:"🧌 Marele Pabbie!", sparkle:"🪨" },
+      { emoji:"👸",   name:"Regina",  bg:"radial-gradient(circle at 30% 25%,#e8d5ff,#c77dff 55%,#7b2d8b)", border:"#c77dff", glow:"rgba(199,125,255,.5)", sound:"star", msg:"👸 Regina din Arendelle!", sparkle:"👑" },
+    ],
+    distractors:[
+      {emoji:"❄️",name:"Fulg de nea"},{emoji:"🌨️",name:"Ninsoare"},{emoji:"💎",name:"Cristal"},
+      {emoji:"🧊",name:"Gheață"},
+    ],
+  },
+
+  dalmatians: {
+    id:"dalmatians", title:"101 Dalmațieni", emoji:"🐕", color:"#555",
+    sky:"linear-gradient(180deg,#87ceeb 0%,#b8d4f0 30%,#dceeff 55%,#e8f5d0 80%,#90c060 100%)",
+    ground:"🌳🏡🌿🌳🏠🌿🌳🏡🌿🌳",
+    celebrate:"paws", showStars:false,
+    heroes:[
+      { emoji:"🐕", name:"Pongo",         bg:"radial-gradient(circle at 30% 25%,#f0f0f0,#c8c8c8 55%,#555)", border:"#888", glow:"rgba(100,100,100,.4)", sound:"ham",  msg:"🐕 Pongo latră fericit!", sparkle:"🐾" },
+      { emoji:"🐩", name:"Perdita",        bg:"radial-gradient(circle at 30% 25%,#fff,#e0e0e0 55%,#666)",   border:"#aaa", glow:"rgba(150,150,150,.4)", sound:"ham",  msg:"🐩 Perdita e mândră!", sparkle:"🐾" },
+      { emoji:"🐶", name:"Cățeluș cu pete",bg:"radial-gradient(circle at 30% 25%,#fff,#f5f5f5 55%,#333)",  border:"#555", glow:"rgba(80,80,80,.4)",   sound:"ham",  msg:"🐶 Cățeluș drăgălaș!", sparkle:"🐾" },
+      { emoji:"🦴", name:"Os magic",       bg:"radial-gradient(circle at 30% 25%,#fff9e6,#ffd166 55%,#b8860b)", border:"#ffd166", glow:"rgba(255,209,102,.5)", sound:"pop", msg:"🦴 Os magic găsit!", sparkle:"✨" },
+    ],
+    distractors:[
+      {emoji:"🐈",name:"Pisică"},{emoji:"🏠",name:"Căsuță"},{emoji:"🐾",name:"Urmă lăbuță"},
+    ],
+  },
+
+  redhood: {
+    id:"redhood", title:"Scufița Roșie", emoji:"🔴", color:"#e53935",
+    sky:"linear-gradient(180deg,#2d5a1b 0%,#3d7a25 20%,#52b788 45%,#8bc34a 70%,#6a9e30 100%)",
+    ground:"🌲🌳🍄🌲🌳🌿🌲🌳🍄🌿",
+    celebrate:"flowers", showStars:false,
+    heroes:[
+      { emoji:"🧝‍♀️", name:"Scufița Roșie",bg:"radial-gradient(circle at 30% 25%,#ffb3b3,#e53935 55%,#7f0000)", border:"#e53935", glow:"rgba(229,57,53,.5)",  sound:"star", msg:"🧝‍♀️ Scufița merge la bunica!", sparkle:"🌸" },
+      { emoji:"👵",    name:"Bunica",        bg:"radial-gradient(circle at 30% 25%,#fff3e0,#ffcc80 55%,#e65100)", border:"#ffcc80", glow:"rgba(255,204,128,.5)",sound:"hmm",  msg:"👵 Bunica te iubește!", sparkle:"💕" },
+      { emoji:"🪓",    name:"Vânătorul",     bg:"radial-gradient(circle at 30% 25%,#d0e8c0,#52b788 55%,#1b4332)", border:"#52b788", glow:"rgba(82,183,136,.5)",sound:"grr",  msg:"🪓 Vânătorul e curajos!", sparkle:"⭐" },
+      { emoji:"🐺",    name:"Lupul rău",     bg:"radial-gradient(circle at 30% 25%,#d0d0d0,#888 55%,#333)",       border:"#888",    glow:"rgba(80,80,80,.4)",  sound:"wolf", msg:"🐺 Lupul rău apare!", sparkle:"💨" },
+    ],
+    distractors:[
+      {emoji:"🍄",name:"Ciupercă"},{emoji:"🌸",name:"Floare"},{emoji:"🔴",name:"Pelerină roșie"},
+      {emoji:"🏡",name:"Căsuța bunicii"},{emoji:"🌲",name:"Copac"},{emoji:"🦋",name:"Fluture"},
+    ],
+  },
+
+  pigs: {
+    id:"pigs", title:"Cei 3 Purceluși", emoji:"🐷", color:"#f48fb1",
+    sky:"linear-gradient(180deg,#87ceeb 0%,#b0d4f0 28%,#c8e8ff 50%,#d4f7c9 72%,#8bc34a 100%)",
+    ground:"🌾🏠🌾🏡🌾🧱🌾🏠🌾🌾",
+    celebrate:"bricks", showStars:false,
+    heroes:[
+      { emoji:"🐷", name:"Nif-Naf", bg:"radial-gradient(circle at 30% 25%,#ffd6e8,#ff6eb4 55%,#c9006b)", border:"#ff6eb4", glow:"rgba(255,110,180,.5)", sound:"oink", msg:"🐷 Nif-Naf din paie!", sparkle:"🌾" },
+      { emoji:"🐖", name:"Nuf-Nuf", bg:"radial-gradient(circle at 30% 25%,#ffe4b0,#f77f00 55%,#d62828)", border:"#f77f00", glow:"rgba(247,127,0,.5)",   sound:"oink", msg:"🐖 Nuf-Nuf din lemne!", sparkle:"🪵" },
+      { emoji:"🐗", name:"Naf-Naf", bg:"radial-gradient(circle at 30% 25%,#d0d0d0,#888 55%,#333)",      border:"#888",    glow:"rgba(100,100,100,.4)", sound:"oink", msg:"🐗 Naf-Naf din cărămidă!", sparkle:"🧱" },
+      { emoji:"🏠", name:"Casa solidă",bg:"radial-gradient(circle at 30% 25%,#fff3e0,#ffd166 55%,#b8860b)",border:"#ffd166",glow:"rgba(255,209,102,.5)",sound:"pop",  msg:"🏠 Casa e solidă!", sparkle:"✨" },
+      { emoji:"🐺", name:"Lupul rău", bg:"radial-gradient(circle at 30% 25%,#d0d0d0,#666 55%,#222)",    border:"#666",    glow:"rgba(60,60,60,.4)",    sound:"wolf", msg:"🐺 Suflă lupul!", sparkle:"💨" },
+    ],
+    distractors:[
+      {emoji:"💨",name:"Vânt"},{emoji:"🌾",name:"Paie"},{emoji:"🪵",name:"Lemne"},{emoji:"🧱",name:"Cărămizi"},
+    ],
+  },
+
+  snowwhite: {
+    id:"snowwhite", title:"Alba ca Zăpada", emoji:"🍎", color:"#c62828",
+    sky:"linear-gradient(180deg,#1a1a2e 0%,#16213e 25%,#0f3460 50%,#533483 75%,#e94560 100%)",
+    ground:"🌹🌸🌺🌹🌷🌸🌺🌹🌷🌸",
+    celebrate:"magic", showStars:false,
+    heroes:[
+      { emoji:"👸", name:"Alba",        bg:"radial-gradient(circle at 30% 25%,#fff,#ffeef0 55%,#ffb3c1)",    border:"#ffb3c1", glow:"rgba(255,179,193,.5)", sound:"star",  msg:"👸 Alba ca Zăpada!", sparkle:"⭐" },
+      { emoji:"🌹", name:"Trandafir",   bg:"radial-gradient(circle at 30% 25%,#ffb3b3,#e53935 55%,#7f0000)", border:"#e53935", glow:"rgba(229,57,53,.5)",  sound:"pop",   msg:"🌹 Un trandafir magic!", sparkle:"🌸" },
+      { emoji:"🍎", name:"Mărul fermecat",bg:"radial-gradient(circle at 30% 25%,#ffb3b3,#e53935 55%,#7f0000)",border:"#c62828",glow:"rgba(198,40,40,.5)",  sound:"bad",   msg:"🍎 Mărul fermecat!", sparkle:"💫" },
+      { emoji:"👑", name:"Coroana",     bg:"radial-gradient(circle at 30% 25%,#fff9c4,#ffd166 55%,#ef8c14)", border:"#ffd166", glow:"rgba(255,209,102,.5)", sound:"star",  msg:"👑 Coroana regală!", sparkle:"✨" },
+      { emoji:"🪞", name:"Oglinda",     bg:"radial-gradient(circle at 30% 25%,#e3f2fd,#90caf9 55%,#1565c0)", border:"#90caf9", glow:"rgba(144,202,249,.5)", sound:"magic", msg:"🪞 Oglindă, oglinjoară!", sparkle:"💎" },
+      { emoji:"🔮", name:"Globul magic",bg:"radial-gradient(circle at 30% 25%,#e0c3fc,#c77dff 55%,#7b2d8b)", border:"#c77dff", glow:"rgba(199,125,255,.5)", sound:"magic", msg:"🔮 Globul magic vorbește!", sparkle:"🌟" },
+      { emoji:"🧟", name:"Vrăjitoarea", bg:"radial-gradient(circle at 30% 25%,#c8e6c9,#388e3c 55%,#1b5e20)", border:"#388e3c", glow:"rgba(56,142,60,.5)",   sound:"bad",   msg:"🧟 Vrăjitoarea apare!", sparkle:"🍄" },
+      { emoji:"🏰", name:"Castelul",    bg:"radial-gradient(circle at 30% 25%,#d0d0d0,#888 55%,#333)",       border:"#888",    glow:"rgba(100,100,100,.4)", sound:"good",  msg:"🏰 Castelul magic!", sparkle:"🌟" },
+      { emoji:"😴", name:"Pitic Somnoros",bg:"radial-gradient(circle at 30% 25%,#ffe8b0,#f5c842 55%,#b8860b)",border:"#f5c842",glow:"rgba(245,200,66,.5)",  sound:"hmm",   msg:"😴 Somnoros doarme!", sparkle:"💤" },
+      { emoji:"🤧", name:"Pitic Strănuță",bg:"radial-gradient(circle at 30% 25%,#fff,#e0e0e0 55%,#666)",     border:"#bbb",    glow:"rgba(180,180,180,.5)", sound:"pop",   msg:"🤧 Hapciu!", sparkle:"🌟" },
+      { emoji:"😠", name:"Pitic Morocănos",bg:"radial-gradient(circle at 30% 25%,#ffb3b3,#e53935 55%,#7f0000)",border:"#e53935",glow:"rgba(229,57,53,.4)",  sound:"grr",   msg:"😠 Morocănos e supărat!", sparkle:"💢" },
+      { emoji:"😊", name:"Pitic Vesel",  bg:"radial-gradient(circle at 30% 25%,#d4f7c9,#52b788 55%,#1b4332)", border:"#52b788", glow:"rgba(82,183,136,.5)", sound:"good",  msg:"😊 Piticul Vesel!", sparkle:"🌟" },
+    ],
+    distractors:[], // all characters are heroes in Snow White
+  },
+};
+
+const STORY_GAMES = Object.keys(WORLDS);
+
+const ANIMALS = [
+  {emoji:"🐶",name:"Cățel",sound:"ham"},{emoji:"🐱",name:"Pisică",sound:"miau"},
+  {emoji:"🐰",name:"Iepuraș",sound:"țup"},{emoji:"🐻",name:"Ursuleț",sound:"grr"},
+  {emoji:"🦊",name:"Vulpiță",sound:"yip"},{emoji:"🐼",name:"Panda",sound:"hmm"},
+  {emoji:"🐨",name:"Koala",sound:"hmm"},{emoji:"🦁",name:"Leuț",sound:"rrr"},
+  {emoji:"🐯",name:"Tigru",sound:"grr"},{emoji:"🐸",name:"Broscuță",sound:"oac"},
+  {emoji:"🐹",name:"Hamstor",sound:"pip"},{emoji:"🦄",name:"Unicorn",sound:"yip"},
+  {emoji:"🐮",name:"Vișelul",sound:"muu"},{emoji:"🐷",name:"Purceluș",sound:"oink"},
+];
+const BIRDS = [
+  {emoji:"🐥",name:"Puișor",sound:"cip"},{emoji:"🦆",name:"Rățușcă",sound:"mac"},
+  {emoji:"🦉",name:"Bufniță",sound:"hu-hu"},{emoji:"🦚",name:"Păun",sound:"cirip"},
+  {emoji:"🦜",name:"Papagal",sound:"cirip"},{emoji:"🐧",name:"Pinguin",sound:"cip"},
+];
+const ALL_CREATURES = [...ANIMALS.map(a=>({...a,kind:"animal"})),...BIRDS.map(b=>({...b,kind:"bird"}))];
+
+const CLASSIC_GAMES = [
+  {id:"free",    title:"Joacă liberă",       emoji:"🎉", subtitle:"Apare și zboară",             color:"#ff6b9d"},
+  {id:"colors",  title:"Culoarea potrivită", emoji:"🎈", subtitle:"Sparge culoarea cerută",      color:"#4895ef"},
+  {id:"animals", title:"Găsește animalul",   emoji:"🐱", subtitle:"Atinge animalul corect",      color:"#52b788"},
+  {id:"count",   title:"Numără",             emoji:"🔢", subtitle:"Sparge exact câte trebuie",   color:"#ffd166"},
+  {id:"speed",   title:"Rapid!",             emoji:"⚡", subtitle:"Prinde tot ce zboară repede",color:"#f77f00"},
+  {id:"shapes",  title:"Forme",              emoji:"⭐", subtitle:"Găsește forma corectă",       color:"#ff4d6d"},
+];
+
+const rand = (a,b) => Math.random()*(b-a)+a;
+const pick = arr => arr[Math.floor(Math.random()*arr.length)];
+const uid  = () => `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+/* ══════════════════════════════════════════════════════
+   AUDIO
+══════════════════════════════════════════════════════ */
+function makeAudio(){
+  let ctx=null;
+  const gc=()=>{ if(!ctx) ctx=new(window.AudioContext||window.webkitAudioContext)(); if(ctx.state==="suspended") ctx.resume(); return ctx; };
+  const beep=(f=440,d=0.12,t="sine",g=0.03)=>{ try{ const a=gc(),o=a.createOscillator(),gn=a.createGain(); o.type=t; o.frequency.value=f; gn.gain.setValueAtTime(g,a.currentTime); gn.gain.exponentialRampToValueAtTime(0.0001,a.currentTime+d); o.connect(gn); gn.connect(a.destination); o.start(); o.stop(a.currentTime+d); }catch(e){} };
+  return {
+    pop:   ()=>{ beep(520,0.06,"triangle",0.04); setTimeout(()=>beep(760,0.08,"sine",0.025),20); },
+    spawn: ()=>beep(440,0.04,"sine",0.01),
+    good:  ()=>{ [523,659,784,1047].forEach((f,i)=>setTimeout(()=>beep(f,0.1,"triangle",0.03),i*65)); },
+    bad:   ()=>{ beep(180,0.12,"sawtooth",0.025); setTimeout(()=>beep(140,0.1,"sawtooth",0.02),80); },
+    whoosh:()=>beep(300,0.22,"sine",0.025),
+    star:  ()=>{ [880,1100,1320,1568].forEach((f,i)=>setTimeout(()=>beep(f,0.09,"triangle",0.035),i*60)); },
+    bambi: ()=>{ [640,820,760,900,1020].forEach((f,i)=>setTimeout(()=>beep(f,0.1,"triangle",0.028),i*75)); },
+    elsa:  ()=>{ [1047,987,880,784,1047,1175].forEach((f,i)=>setTimeout(()=>beep(f,0.12,"sine",0.025),i*85)); },
+    wolf:  ()=>{ [180,160,140,120].forEach((f,i)=>setTimeout(()=>beep(f,0.15,"sawtooth",0.03),i*70)); },
+    magic: ()=>{ for(let i=0;i<7;i++) setTimeout(()=>beep(rand(600,1400),0.07,"sine",0.02),i*50); },
+    grr:   ()=>{ beep(140,0.18,"sawtooth",0.03); setTimeout(()=>beep(120,0.12,"sawtooth",0.025),80); },
+    oink:  ()=>{ beep(300,0.08,"sine",0.035); setTimeout(()=>beep(240,0.1,"sine",0.03),80); },
+    ham:   ()=>{ beep(320,0.06,"triangle",0.03); setTimeout(()=>beep(280,0.08,"triangle",0.025),60); },
+    hmm:   ()=>beep(240,0.1,"sine",0.025),
+    animal:(n)=>{
+      const m={bambi:[640,820],ham:[320,280],miau:[520,660],"țup":[740,520],grr:[180,140],yip:[700,840],
+               hmm:[240,220],cip:[980,1150],mac:[420,350],cirip:[900,1050],"hu-hu":[260,220],
+               rrr:[200,160],oac:[350,280],pip:[900,1000],muu:[250,200],oink:[300,240]};
+      const t=m[n]||[500,700];
+      beep(t[0],0.07,"triangle",0.03); setTimeout(()=>beep(t[1],0.1,"triangle",0.03),80);
+    },
+  };
+}
+
+/* ══════════════════════════════════════════════════════
+   ITEM FACTORY
+══════════════════════════════════════════════════════ */
+function makeItem(x,y,game,diff){
+  const D=DIFFICULTY[diff];
+  const color=pick(COLORS);
+  const base={ id:uid(),x,y,vx:rand(-7,7),
+    speed:game==="speed"?rand(65,90):rand(D.speed[0],D.speed[1]),
+    size:rand(D.itemSize[0],D.itemSize[1]),color,bornAt:Date.now(),
+    life:game==="speed"?rand(3200,4800):D.life,drift:rand(0,1000),state:"floating" };
+
+  if(STORY_GAMES.includes(game)){
+    const W=WORLDS[game];
+    const allItems=[...W.heroes,...W.distractors];
+    // 50% chance hero, 50% distractor (if distractors exist)
+    const useHero = W.distractors.length===0 || Math.random()<0.45;
+    if(useHero){
+      const h=pick(W.heroes);
+      return{...base,render:"hero",hero:h,label:h.name,sound:h.sound,kind:game,size:rand(D.itemSize[0]+4,D.itemSize[1]+14)};
+    }
+    const d=pick(W.distractors);
+    return{...base,render:"emoji",emoji:d.emoji,label:d.name,sound:null,kind:"distractor"};
+  }
+
+  if(game==="free"){
+    const i=pick([...ALL_CREATURES,{emoji:"🎈",kind:"balloon",name:"Balon",sound:null},{emoji:"⭐",kind:"star",name:"Stea",sound:null}]);
+    return{...base,render:"emoji",emoji:i.emoji,label:i.name,kind:i.kind||"animal",sound:i.sound};
+  }
+  if(["colors","count"].includes(game)) return{...base,render:"balloon",label:`Balon ${COLOR_MAP[color].name}`,kind:"balloon"};
+  if(game==="animals"){ const i=pick(ALL_CREATURES); return{...base,render:"emoji",emoji:i.emoji,label:i.name,sound:i.sound,kind:i.kind}; }
+  if(game==="speed"){ const i=pick(ALL_CREATURES); return{...base,render:"emoji",emoji:i.emoji,label:i.name,sound:i.sound,kind:"target"}; }
+  if(game==="shapes"){ const s=pick(SHAPES); return{...base,render:"shape",shape:s,label:s,kind:"shape"}; }
+  return{...base,render:"balloon",label:`Balon ${COLOR_MAP[color].name}`,kind:"balloon"};
+}
+
+/* ══════════════════════════════════════════════════════
+   HERO BUBBLE
+══════════════════════════════════════════════════════ */
+function HeroBubble({hero,size,held,showName=false}){
+  return(
+    <div style={{display:"flex",flexDirection:"column",alignItems:"center",position:"relative"}}>
+      <div style={{position:"absolute",top:-10,left:-10,right:-10,bottom:-10,borderRadius:"50%",
+        background:`radial-gradient(circle,${hero.glow},transparent 70%)`,
+        filter:"blur(12px)",opacity:held?1:0.65,transition:"opacity .3s",
+        animation:held?"none":"hero-pulse 2.2s ease-in-out infinite"}}/>
+      <div style={{width:size,height:size,borderRadius:"50%",overflow:"hidden",flexShrink:0,
+        background:hero.bg,border:`4px solid ${hero.border}`,
+        boxShadow:`0 0 0 3px rgba(255,255,255,0.7),0 8px 32px ${hero.glow},inset 0 2px 8px rgba(255,255,255,0.4)`,
+        display:"flex",alignItems:"center",justifyContent:"center",position:"relative",transition:"box-shadow .3s"}}>
+        <div style={{position:"absolute",top:"12%",left:"14%",width:"34%",height:"24%",borderRadius:"50%",
+          background:"radial-gradient(circle,rgba(255,255,255,0.85),transparent)",transform:"rotate(-25deg)"}}/>
+        <div style={{fontSize:size*0.5,position:"relative",zIndex:1}}>{hero.emoji}</div>
+      </div>
+      {showName&&<div style={{marginTop:5,padding:"3px 12px",borderRadius:14,background:hero.border,color:"#fff",
+        fontSize:Math.max(10,size*0.13),fontWeight:900,fontFamily:"'Fredoka One',cursive",
+        boxShadow:`0 3px 10px ${hero.glow}`,zIndex:1,letterSpacing:0.4,
+        textShadow:"0 1px 3px rgba(0,0,0,0.3)"}}>{hero.name}</div>}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════
+   BALLOON
+══════════════════════════════════════════════════════ */
+function Balloon({color,size,held}){
+  const cm=COLOR_MAP[color];
+  return(
+    <div style={{display:"flex",flexDirection:"column",alignItems:"center",width:size,position:"relative"}}>
+      <div style={{position:"absolute",top:size*0.08,left:"50%",transform:"translateX(-50%)",width:size*0.8,height:size*0.8,borderRadius:"50%",background:cm.glow,filter:"blur(14px)",opacity:held?0.95:0.55,transition:"opacity .3s",pointerEvents:"none"}}/>
+      <div style={{width:size,height:size,borderRadius:"50% 50% 50% 50% / 55% 55% 45% 45%",background:cm.grad,
+        boxShadow:`inset -5px -10px 18px rgba(0,0,0,0.18),inset 4px 5px 12px rgba(255,255,255,0.4),0 6px 28px ${cm.glow}`,
+        position:"relative",overflow:"hidden",flexShrink:0}}>
+        <div style={{position:"absolute",top:"13%",left:"17%",width:"37%",height:"26%",borderRadius:"50%",background:"radial-gradient(circle,rgba(255,255,255,0.9),transparent)",transform:"rotate(-28deg)"}}/>
+        <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:size*0.36}}>😊</div>
+      </div>
+      <div style={{width:9,height:9,borderRadius:"50%",background:cm.hex,boxShadow:`0 2px 6px ${cm.glow}`,marginTop:-1}}/>
+      <svg width={18} height={20}><path d="M9 0 Q5 10 9 20" stroke="rgba(255,255,255,0.7)" strokeWidth="1.5" fill="none"/></svg>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════
+   SHAPE
+══════════════════════════════════════════════════════ */
+function Shape({shape,color,size}){
+  const cm=COLOR_MAP[color];
+  const base={position:"relative",zIndex:1,boxShadow:`0 4px 24px ${cm.glow},inset 0 2px 6px rgba(255,255,255,0.3)`};
+  let s;
+  if(shape==="circle")        s={...base,width:size,height:size,borderRadius:"50%",background:cm.hex};
+  else if(shape==="square")   s={...base,width:size,height:size,borderRadius:18,background:cm.hex};
+  else if(shape==="triangle") s={...base,width:0,height:0,borderLeft:`${size/2}px solid transparent`,borderRight:`${size/2}px solid transparent`,borderBottom:`${size*0.87}px solid ${cm.hex}`,background:"transparent",borderRadius:0};
+  else if(shape==="heart")    s={...base,width:size,height:size,background:cm.hex,clipPath:"polygon(50% 80%,15% 45%,15% 30%,30% 15%,50% 30%,70% 15%,85% 30%,85% 45%)"};
+  else if(shape==="diamond")  s={...base,width:size,height:size,background:cm.hex,clipPath:"polygon(50% 0%,100% 50%,50% 100%,0% 50%)"};
+  else s={...base,width:size,height:size,background:cm.hex,clipPath:"polygon(50% 0%,61% 35%,98% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,2% 35%,39% 35%)"};
+  return(
+    <div style={{width:size+20,height:size+20,display:"flex",alignItems:"center",justifyContent:"center",position:"relative"}}>
+      <div style={{position:"absolute",width:size*0.85,height:size*0.85,borderRadius:"50%",background:cm.glow,filter:"blur(12px)"}}/>
+      <div style={s}/>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════
+   PARTICLES
+══════════════════════════════════════════════════════ */
+function Burst({x,y,emoji}){
+  const parts=useMemo(()=>Array.from({length:10},(_,i)=>({dx:rand(-85,85),dy:rand(-100,-18),delay:i*28})),[]);
+  return<>{parts.map((p,i)=>(
+    <div key={i} style={{position:"absolute",left:x,top:y,fontSize:22,pointerEvents:"none",zIndex:60,
+      animation:`burst-fly .78s ease-out ${p.delay}ms both`,"--dx":`${p.dx}px`,"--dy":`${p.dy}px`}}>
+      {pick(["✨","⭐","💫","🌟",emoji])}
+    </div>
+  ))}</>;
+}
+
+function Flash({x,y,text}){
+  return<div style={{position:"absolute",left:x,top:y,fontFamily:"'Fredoka One',cursive",
+    fontSize:24,fontWeight:900,color:"#fff",textShadow:"0 2px 8px rgba(0,0,0,0.55)",
+    pointerEvents:"none",zIndex:70,transform:"translateX(-50%)",
+    animation:"flash-up .9s ease-out both"}}>{text}</div>;
+}
+
+function CelebrateRain({type}){
+  const sets={
+    snow:    ["❄️","🌨️","💎","⛄"],
+    leaf:    ["🍃","🌿","🍀","🌸","🦋"],
+    paws:    ["🐾","🦴","💛","🐕"],
+    flowers: ["🌸","🌺","🌹","🌷","🌼"],
+    bricks:  ["🧱","🏠","⭐","💛"],
+    magic:   ["⭐","✨","💫","🌟","💎","🪄"],
+  };
+  const emojis=sets[type]||sets.magic;
+  const items=useMemo(()=>Array.from({length:18},(_,i)=>({id:i,left:`${rand(2,98)}%`,delay:rand(0,1.5),dur:rand(1.4,2.6),size:rand(16,32),emoji:pick(emojis)})),[type]);
+  return<>{items.map(f=>(
+    <div key={f.id} style={{position:"absolute",left:f.left,top:"-4%",fontSize:f.size,pointerEvents:"none",zIndex:55,
+      animation:`celebrate-fall ${f.dur}s ease-in ${f.delay}s both`}}>{f.emoji}</div>
+  ))}</>;
+}
+
+/* ══════════════════════════════════════════════════════
+   MAIN APP
+══════════════════════════════════════════════════════ */
+export default function App(){
+  const [game,setGame]             = useState("free");
+  const [diff,setDiff]             = useState("medium");
+  const [items,setItems]           = useState([]);
+  const [bursts,setBursts]         = useState([]);
+  const [flashes,setFlashes]       = useState([]);
+  const [score,setScore]           = useState(0);
+  const [streak,setStreak]         = useState(0);
+  const [stars,setStars]           = useState(0);
+  const [soundOn,setSoundOn]       = useState(true);
+  const [holdingId,setHoldingId]   = useState(null);
+  const [pressedScale,setPressedScale] = useState(1);
+  const [targetColor,setTargetColor]   = useState("red");
+  const [targetAnimal,setTargetAnimal] = useState(ANIMALS[1]);
+  const [targetCount,setTargetCount]   = useState(3);
+  const [poppedCount,setPoppedCount]   = useState(0);
+  const [targetShape,setTargetShape]   = useState("circle");
+  const [targetHero,setTargetHero]     = useState(null);
+  const [message,setMessage]       = useState("Alege un joc și pornește distracția! 🎉");
+  const [speedTime,setSpeedTime]   = useState(25);
+  const [sideOpen,setSideOpen]     = useState(true);
+  const [pulse,setPulse]           = useState(false);
+  const [celebrateType,setCelebrate] = useState(null);
+  const [heroScore,setHeroScore]   = useState(0);
+  const [showNames,setShowNames]   = useState(false); // OFF by default
+
+  const areaRef  = useRef(null);
+  const frameRef = useRef(null);
+  const holdRef  = useRef(null);
+  const lastTRef = useRef(0);
+  const spawnRef = useRef(null);
+  const audioRef = useRef(null);
+
+  const D = DIFFICULTY[diff];
+  const W = WORLDS[game] || null;
+  const isStory = STORY_GAMES.includes(game);
+  const selClassic = CLASSIC_GAMES.find(g=>g.id===game);
+  const isNight = game==="snowwhite" || game==="elsa";
+
+  // Inject mobile viewport meta for tablet/phone
+  useEffect(()=>{
+    let meta = document.querySelector('meta[name="viewport"]');
+    if(!meta){ meta=document.createElement('meta'); meta.name='viewport'; document.head.appendChild(meta); }
+    meta.content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover';
+    document.body.style.overflow='hidden';
+    document.body.style.position='fixed';
+    document.body.style.width='100%';
+    document.body.style.height='100%';
+    return()=>{ document.body.style.overflow=''; document.body.style.position=''; };
+  },[]);
+
+  useEffect(()=>{ audioRef.current=makeAudio(); },[]);
+  const play=useCallback((n,a)=>{ if(!soundOn||!audioRef.current?.[n]) return; audioRef.current[n](a); },[soundOn]);
+
+  const addBurst=useCallback((x,y,emoji="✨")=>{
+    const id=uid(); setBursts(p=>[...p,{id,x,y,emoji}]);
+    setTimeout(()=>setBursts(p=>p.filter(b=>b.id!==id)),1000);
+  },[]);
+  const addFlash=useCallback((x,y,text)=>{
+    const id=uid(); setFlashes(p=>[...p,{id,x,y,text}]);
+    setTimeout(()=>setFlashes(p=>p.filter(f=>f.id!==id)),1100);
+  },[]);
+
+  const doCelebrate=useCallback((txt,type="magic")=>{
+    setStars(s=>s+1); setMessage(txt); play("star");
+    setPulse(true); setTimeout(()=>setPulse(false),700);
+    setCelebrate(type); setTimeout(()=>setCelebrate(null),3000);
+  },[play]);
+
+  const shapeName=s=>({circle:"Cerc",square:"Pătrat",triangle:"Triunghi",heart:"Inimă",diamond:"Diamant",star:"Stea"}[s]||s);
+
+  const pickNextHero=useCallback((WW)=>{
+    const h=pick(WW.heroes); setTargetHero(h); return h;
+  },[]);
+
+  const reset=useCallback((g,d)=>{
+    const cur=g||game; const curD=DIFFICULTY[d||diff];
+    setItems([]); setBursts([]); setFlashes([]);
+    setScore(0); setStreak(0); setPoppedCount(0); setHeroScore(0);
+    setHoldingId(null); holdRef.current=null; setPressedScale(1);
+    if(STORY_GAMES.includes(cur)){
+      const WW=WORLDS[cur]; const h=pick(WW.heroes); setTargetHero(h);
+      setMessage(`Găsește-l pe ${h.name}! ${h.emoji}`);
+    } else if(cur==="colors"){ const c=pick(COLORS); setTargetColor(c); setMessage(`Sparge baloanele ${COLOR_MAP[c].name.toLowerCase()}!`); }
+    else if(cur==="animals"){ const a=pick(ALL_CREATURES); setTargetAnimal(a); setMessage(`Găsește ${a.name.toLowerCase()}!`); }
+    else if(cur==="count"){ const n=Math.floor(rand(curD.count[0],curD.count[1])); setTargetCount(n); setMessage(`Sparge exact ${n} baloane!`); }
+    else if(cur==="speed"){ setSpeedTime(25); setMessage("Prinde cât mai multe înainte să dispară!"); }
+    else if(cur==="shapes"){ const s=pick(SHAPES); setTargetShape(s); setMessage(`Atinge ${shapeName(s)}!`); }
+    else setMessage("Apasă sau ține apăsat ca să umpli cerul! 🎈");
+  },[game,diff]);
+
+  useEffect(()=>{ reset(game,diff); },[game,diff]);
+
+  const spawnAt=useCallback((cx,cy)=>{
+    const rect=areaRef.current?.getBoundingClientRect(); if(!rect) return null;
+    const item=makeItem(cx-rect.left,cy-rect.top,game,diff);
+    setItems(p=>[...p,item]); play("spawn"); return item.id;
+  },[game,diff,play]);
+
+  const spawnRandom=useCallback((n=1)=>{
+    const rect=areaRef.current?.getBoundingClientRect(); if(!rect) return;
+    setItems(p=>[...p,...Array.from({length:n},()=>makeItem(rand(85,rect.width-85),rand(rect.height*0.5,rect.height-105),game,diff))]);
+  },[game,diff]);
+
+  useEffect(()=>{ spawnRandom(game==="speed"?6:4); },[game,diff]);
+
+  useEffect(()=>{
+    clearInterval(spawnRef.current);
+    const ms=game==="speed"?850:D.spawnMs;
+    const n=game==="speed"?2:1;
+    if(game!=="free") spawnRef.current=setInterval(()=>spawnRandom(n),ms);
+    return()=>clearInterval(spawnRef.current);
+  },[game,diff,spawnRandom,D.spawnMs]);
+
+  useEffect(()=>{
+    if(game!=="speed") return;
+    const t=setInterval(()=>setSpeedTime(p=>Math.max(0,p-1)),1000);
+    return()=>clearInterval(t);
+  },[game]);
+
+  useEffect(()=>{
+    if(game==="speed"&&speedTime===0){ setMessage(`Timp expirat! Ai prins ${score}! 🏆`); doCelebrate("Super rapid!","magic"); clearInterval(spawnRef.current); }
+  },[speedTime,game]);
+
+  useEffect(()=>{
+    const loop=(t)=>{
+      if(!lastTRef.current) lastTRef.current=t;
+      const dt=Math.min((t-lastTRef.current)/1000,0.04); lastTRef.current=t;
+      setItems(prev=>prev.map(item=>{
+        const held=holdRef.current?.id===item.id;
+        const hSec=held?Math.min((t-holdRef.current.startedAt)/1000,3):0;
+        const sz=held?Math.min(item.size+hSec*55,230):item.size;
+        const fly=item.state==="flying"||held||true;
+        return{...item,size:sz,y:fly?item.y-item.speed*dt:item.y,x:item.x+Math.sin(t/700+item.drift)*item.vx*dt};
+      }).filter(item=>item.y+item.size>-170&&Date.now()-item.bornAt<item.life));
+      if(holdRef.current) setPressedScale(1+Math.min((t-holdRef.current.startedAt)/1000,3)*0.6);
+      frameRef.current=requestAnimationFrame(loop);
+    };
+    frameRef.current=requestAnimationFrame(loop);
+    return()=>cancelAnimationFrame(frameRef.current);
+  },[game]);
+
+  const beginHold=(cx,cy)=>{ if(game!=="free") return; const id=spawnAt(cx,cy); if(!id) return; holdRef.current={id,startedAt:performance.now()}; setHoldingId(id); setPressedScale(1); };
+  const endHold=()=>{ if(game!=="free") return; if(holdRef.current) play("whoosh"); holdRef.current=null; setHoldingId(null); setPressedScale(1); };
+  const tapArea=(e)=>{ e.preventDefault?.(); if(game==="free") return; const pt=e.touches?.[0]||e; spawnAt(pt.clientX,pt.clientY); };
+  const wrongAction=useCallback(()=>{ setStreak(0); setMessage("Mai încearcă! Tu poți! 💛"); play("bad"); },[play]);
+  const removeItem=id=>setItems(p=>p.filter(i=>i.id!==id));
+
+  const nextStoryRound=useCallback(()=>{
+    if(!W) return;
+    const h=pick(W.heroes); setTargetHero(h);
+    setMessage(`Acum găsește-l pe ${h.name}! ${h.emoji}`);
+  },[W]);
+
+  const nextRound=useCallback(()=>{
+    if(game==="colors"){ const c=pick(COLORS); setTargetColor(c); setMessage(`Acum caută ${COLOR_MAP[c].name.toLowerCase()}!`); }
+    else if(game==="animals"){ const a=pick(ALL_CREATURES); setTargetAnimal(a); setMessage(`Găsește ${a.name.toLowerCase()}!`); }
+    else if(game==="count"){ const n=Math.floor(rand(D.count[0],D.count[1])); setTargetCount(n); setPoppedCount(0); setMessage(`Sparge exact ${n} baloane!`); }
+    else if(game==="shapes"){ const s=pick(SHAPES); setTargetShape(s); setMessage(`Atinge ${shapeName(s)}!`); }
+  },[game,D]);
+
+  const handleItem=useCallback((item)=>{
+    if(game==="free"){
+      addBurst(item.x,item.y,"✨"); addFlash(item.x,item.y,item.label||"🎉");
+      if(item.sound) play("animal",item.sound);
+      setScore(s=>s+1); return;
+    }
+    const cx=item.x,cy=item.y;
+    if(isStory){
+      if(item.render==="hero" && item.hero.name===targetHero?.name){
+        removeItem(item.id); addBurst(cx,cy,item.hero.sparkle); addFlash(cx,cy,"❤️ +1");
+        setHeroScore(s=>s+1); setScore(s=>s+1); setStreak(s=>s+1);
+        const snd=item.hero.sound;
+        if(snd==="bambi") play("bambi");
+        else if(snd==="elsa") play("elsa");
+        else if(snd==="wolf") play("wolf");
+        else if(snd==="magic") play("magic");
+        else if(snd==="grr") play("grr");
+        else if(snd==="oink") play("oink");
+        else if(snd==="hmm") play("hmm");
+        else if(snd==="ham") play("ham");
+        else if(snd==="bad") play("bad");
+        else if(snd==="good") play("good");
+        else if(snd==="pop") play("pop");
+        else if(snd==="star") play("star");
+        setMessage(item.hero.msg);
+        if(streak+1>=D.streakNeeded) doCelebrate(`🏆 Bravo! Ai găsit ${streak+1} la rând!`,W?.celebrate||"magic");
+        else setTimeout(()=>nextStoryRound(),1400);
+      } else if(item.render==="hero"){ wrongAction(); }
+      return;
+    }
+    if(game==="colors"){
+      if(item.color===targetColor){ removeItem(item.id); addBurst(cx,cy,"🎈"); addFlash(cx,cy,"+1"); setScore(s=>s+1); setStreak(s=>s+1); play("pop");
+        if(streak+1>=D.streakNeeded){ doCelebrate("Bravo! Culori perfecte!"); nextRound(); }
+        else setMessage(`Perfect! Mai caută ${COLOR_MAP[targetColor].name.toLowerCase()}!`);
+      } else wrongAction(); return;
+    }
+    if(game==="animals"){
+      if(item.label===targetAnimal.name){ removeItem(item.id); addBurst(cx,cy,item.emoji||"✨"); addFlash(cx,cy,"+1"); setScore(s=>s+1); setStreak(s=>s+1); play("animal",item.sound||"cip");
+        if(streak+1>=D.streakNeeded){ doCelebrate(`Bravo! Ai găsit ${targetAnimal.name}!`); nextRound(); }
+        else setMessage(`Da! ${targetAnimal.name}! 🐾`);
+      } else wrongAction(); return;
+    }
+    if(game==="count"){
+      removeItem(item.id); addBurst(cx,cy,"💥"); addFlash(cx,cy,"POP!"); play("pop");
+      setPoppedCount(c=>{ const next=c+1;
+        if(next===targetCount){ setScore(s=>s+1); doCelebrate(`Exact ${targetCount}! Minunat!`); setTimeout(()=>nextRound(),600); }
+        else if(next>targetCount){ wrongAction(); setTimeout(()=>nextRound(),600); }
+        else setMessage(`Ai spart ${next}. Mai ai ${targetCount-next}!`);
+        return next;
+      }); return;
+    }
+    if(game==="speed"){ removeItem(item.id); addBurst(cx,cy,"⚡"); addFlash(cx,cy,"+1"); setScore(s=>{ if((s+1)%10===0) doCelebrate("Ești fulger! ✨"); return s+1; }); play("pop"); return; }
+    if(game==="shapes"){
+      if(item.shape===targetShape){ removeItem(item.id); addBurst(cx,cy,"⭐"); addFlash(cx,cy,"+1"); setScore(s=>s+1); setStreak(s=>s+1); play("good");
+        if(streak+1>=D.streakNeeded){ doCelebrate("Bravo! Maestrul formelor!"); nextRound(); }
+        else setMessage("Corect! Mai caută aceeași formă!");
+      } else wrongAction(); return;
+    }
+  },[game,isStory,targetColor,targetAnimal,targetCount,targetShape,targetHero,streak,nextRound,nextStoryRound,wrongAction,addBurst,addFlash,play,doCelebrate,D,W]);
+
+  const skyBg = W ? W.sky : "linear-gradient(180deg,#7ec8e3 0%,#a8d8ea 22%,#c2ecf5 45%,#d4f7c9 72%,#a8d87c 100%)";
+
+  const badge=useMemo(()=>{
+    const bs={display:"flex",alignItems:"center",gap:10,background:"rgba(255,255,255,0.92)",backdropFilter:"blur(12px)",borderRadius:20,padding:"9px 16px",boxShadow:"0 4px 20px rgba(0,0,0,0.1)",border:"1.5px solid rgba(255,255,255,0.6)"};
+    const lbl={fontSize:9,fontWeight:700,letterSpacing:2,color:"#999",textTransform:"uppercase"};
+    const val={fontSize:16,fontWeight:900,color:"#1a1a2e",fontFamily:"'Fredoka One',cursive"};
+    if(isStory&&targetHero) return(
+      <div style={bs}>
+        <div style={{width:38,height:38,borderRadius:"50%",background:targetHero.bg,border:`3px solid ${targetHero.border}`,
+          display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,flexShrink:0}}>{targetHero.emoji}</div>
+        <div><div style={lbl}>Găsește</div><div style={{...val,color:targetHero.border}}>{targetHero.name}</div></div>
+        <div style={{borderLeft:"1px solid #eee",paddingLeft:10,marginLeft:2}}>
+          <div style={lbl}>Prins</div><div style={val}>{heroScore}</div>
+        </div>
+      </div>);
+    if(game==="colors") return(<div style={bs}><div style={{width:28,height:28,borderRadius:"50%",background:COLOR_MAP[targetColor].grad,boxShadow:`0 0 12px ${COLOR_MAP[targetColor].glow}`,flexShrink:0}}/><div><div style={lbl}>Culoarea</div><div style={val}>{COLOR_MAP[targetColor].name}</div></div></div>);
+    if(game==="animals") return(<div style={bs}><span style={{fontSize:26}}>{targetAnimal.emoji}</span><div><div style={lbl}>Găsește</div><div style={val}>{targetAnimal.name}</div></div></div>);
+    if(game==="count")   return(<div style={bs}><span style={{fontSize:24}}>🎯</span><div><div style={lbl}>Progres</div><div style={val}>{poppedCount} / {targetCount}</div></div></div>);
+    if(game==="shapes")  return(<div style={bs}><span style={{fontSize:24}}>{targetShape==="circle"?"⭕":targetShape==="square"?"🟦":targetShape==="triangle"?"🔺":targetShape==="heart"?"❤️":targetShape==="diamond"?"💎":"⭐"}</span><div><div style={lbl}>Forma</div><div style={val}>{shapeName(targetShape)}</div></div></div>);
+    if(game==="speed")   return(<div style={bs}><span style={{fontSize:22}}>⏱️</span><div><div style={lbl}>Timp</div><div style={{...val,color:speedTime<=5?"#ff4d6d":"#1a1a2e",transition:"color .3s"}}>{speedTime}s</div></div></div>);
+    return null;
+  },[game,isStory,targetHero,targetColor,targetAnimal,targetCount,poppedCount,targetShape,speedTime,heroScore]);
+
+  const gameColor = W?.color || selClassic?.color || "#ff6b9d";
+  const gameTitle = W?.title || selClassic?.title || "Joacă";
+  const gameEmoji = W?.emoji || selClassic?.emoji || "🎉";
+
+  return(
+    <>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@700;900&display=swap');
+        *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+        body{margin:0;font-family:'Nunito',sans-serif;}
+        @keyframes sway{0%,100%{transform:rotate(-3deg)}50%{transform:rotate(3deg)}}
+        @keyframes float-c{0%,100%{transform:translateX(0)}50%{transform:translateX(20px)}}
+        @keyframes float-c2{0%,100%{transform:translateX(0)}50%{transform:translateX(-18px)}}
+        @keyframes sun-p{0%,100%{box-shadow:0 0 0 8px rgba(255,220,0,.2),0 0 32px #ffcc0066}50%{box-shadow:0 0 0 16px rgba(255,220,0,.28),0 0 48px #ffcc00aa}}
+        @keyframes burst-fly{0%{opacity:1;transform:translate(0,0) scale(.5)}100%{opacity:0;transform:translate(var(--dx),var(--dy)) scale(1.5)}}
+        @keyframes flash-up{0%{opacity:1;transform:translateX(-50%) translateY(0) scale(.8)}70%{opacity:1;transform:translateX(-50%) translateY(-48px) scale(1.1)}100%{opacity:0;transform:translateX(-50%) translateY(-70px) scale(.9)}}
+        @keyframes item-in{0%{opacity:0;transform:translate(-50%,-50%) scale(.3)}100%{opacity:1;transform:translate(-50%,-50%) scale(1)}}
+        @keyframes msg-in{0%{opacity:0;transform:translateY(6px)}100%{opacity:1;transform:translateY(0)}}
+        @keyframes hero-pulse{0%,100%{opacity:.6;transform:scale(1)}50%{opacity:.95;transform:scale(1.1)}}
+        @keyframes celebrate-fall{0%{opacity:1;transform:translateY(0) rotate(0deg)}100%{opacity:0;transform:translateY(115vh) rotate(360deg)}}
+        @keyframes moon-glow{0%,100%{box-shadow:0 0 20px #fff4,0 0 40px #aaf4}50%{box-shadow:0 0 30px #fff6,0 0 60px #aaf6}}
+        .item-in{animation:item-in .38s cubic-bezier(.34,1.56,.64,1) both}
+        .msg-in{animation:msg-in .3s ease-out}
+
+        html,body{touch-action:manipulation;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;overscroll-behavior:none;}
+        button{-webkit-tap-highlight-color:transparent;touch-action:manipulation;}
+
+        @media(max-width:768px)and(orientation:portrait){
+          .app-layout{flex-direction:column!important;padding:6px!important;gap:6px!important;}
+          .sidebar{width:100%!important;max-height:190px!important;overflow-y:auto!important;}
+          .sidebar-inner{flex-direction:row!important;flex-wrap:wrap!important;overflow-x:auto!important;padding:6px!important;}
+          .sidebar-game-btn{min-width:72px!important;flex:0 0 auto!important;}
+          .canvas-area{min-height:55vh!important;}
+        }
+        @media(max-width:480px){
+          .msg-bar{flex-direction:column!important;gap:6px!important;}
+        }
+        @media(pointer:coarse){
+          button{min-height:48px;}
+        }
+      `}</style>
+
+      <div style={{display:"flex",minHeight:"100dvh",minHeight:"100vh",padding:12,gap:12,height:"100dvh",height:"100vh",overflow:"hidden",
+        background:pulse?"radial-gradient(circle at 50% 50%,#fffde7,#ffefc0 50%,#f0f7ff)":"linear-gradient(160deg,#f0f7ff,#e8f4ff 40%,#f0fff4)",
+        transition:"background .5s",fontFamily:"'Nunito',sans-serif"}} className="app-layout">
+
+        {/* ─── SIDEBAR ─── */}
+        <div style={{flexShrink:0,width:sideOpen?304:68,transition:"width .35s cubic-bezier(.34,1.2,.64,1)",
+          borderRadius:28,overflow:"hidden",background:"rgba(255,255,255,0.86)",backdropFilter:"blur(20px)",
+          boxShadow:"0 8px 48px rgba(0,0,0,0.09),inset 0 1px 0 rgba(255,255,255,0.9)",
+          border:"1.5px solid rgba(255,255,255,0.75)",display:"flex",flexDirection:"column"}}>
+
+          <div style={{padding:"16px 12px 8px",display:"flex",alignItems:"center",justifyContent:sideOpen?"space-between":"center",gap:8}}>
+            {sideOpen&&<div>
+              <div style={{fontSize:9,fontWeight:700,letterSpacing:3,color:"#ff6b9d",textTransform:"uppercase"}}>Kids Play</div>
+              <div style={{fontSize:24,fontWeight:900,color:"#1a1a2e",fontFamily:"'Fredoka One',cursive",lineHeight:1.1}}>Balonel ✨</div>
+            </div>}
+            <button onClick={()=>setSideOpen(v=>!v)} style={{width:40,height:40,borderRadius:12,border:"none",cursor:"pointer",flexShrink:0,
+              background:"linear-gradient(135deg,#ff6b9d,#ff8e53)",color:"#fff",fontSize:14,
+              boxShadow:"0 4px 14px #ff6b9d44",display:"flex",alignItems:"center",justifyContent:"center"}}>
+              {sideOpen?"◀":"▶"}
+            </button>
+          </div>
+
+          {sideOpen&&<div style={{padding:"0 12px 10px"}}>
+            <div style={{fontSize:9,fontWeight:700,letterSpacing:2,color:"#888",textTransform:"uppercase",marginBottom:6}}>Vârstă</div>
+            <div style={{display:"flex",gap:5}}>
+              {Object.entries(DIFFICULTY).map(([k,v])=>(
+                <button key={k} onClick={()=>setDiff(k)} style={{flex:1,borderRadius:12,border:"none",cursor:"pointer",padding:"8px 3px",
+                  background:diff===k?"linear-gradient(135deg,#ff6b9d,#ff8e53)":"rgba(0,0,0,0.05)",
+                  color:diff===k?"#fff":"#555",fontSize:11,fontWeight:900,
+                  boxShadow:diff===k?"0 3px 12px #ff6b9d44":"none",transition:"all .2s",lineHeight:1.3}}>
+                  {v.emoji}<br/>{k==="easy"?"2-3":k==="medium"?"4-5":"6+"}
+                </button>
+              ))}
+            </div>
+          </div>}
+
+          {sideOpen&&<div style={{padding:"0 12px 10px",display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+            {[{l:"Scor",v:score,ic:"🎯",bg:"linear-gradient(135deg,#e3f2fd,#bbdefb)",fg:"#1565c0"},
+              {l:"Stele",v:stars,ic:"⭐",bg:"linear-gradient(135deg,#fff9c4,#fff176)",fg:"#f57f17"},
+              {l:"Serie",v:streak,ic:"🔥",bg:"linear-gradient(135deg,#fce4ec,#f48fb1)",fg:"#c62828"}].map(s=>(
+              <div key={s.l} style={{background:s.bg,borderRadius:16,padding:"10px 12px",boxShadow:"0 2px 8px rgba(0,0,0,0.07)"}}>
+                <div style={{fontSize:9,fontWeight:700,color:s.fg,textTransform:"uppercase",letterSpacing:1}}>{s.ic} {s.l}</div>
+                <div style={{fontSize:24,fontWeight:900,color:"#1a1a2e",fontFamily:"'Fredoka One',cursive"}}>{s.v}</div>
+              </div>
+            ))}
+            <div style={{gridColumn:"1/-1",display:"flex",gap:7}}>
+              <button onClick={()=>setSoundOn(v=>!v)} style={{flex:1,borderRadius:12,border:"none",cursor:"pointer",padding:"8px 4px",
+                background:soundOn?"linear-gradient(135deg,#e8f5e9,#c8e6c9)":"linear-gradient(135deg,#fafafa,#eee)",
+                fontSize:12,fontWeight:700,color:soundOn?"#2e7d32":"#757575"}}>
+                {soundOn?"🔊 Sunet":"🔇 Mut"}
+              </button>
+              <button onClick={()=>reset(game,diff)} style={{flex:1,borderRadius:12,border:"none",cursor:"pointer",padding:"8px 4px",
+                background:"linear-gradient(135deg,#e8eaf6,#c5cae9)",fontSize:12,fontWeight:700,color:"#3949ab"}}>
+                ↺ Reset
+              </button>
+              <button onClick={()=>setShowNames(v=>!v)} style={{flex:1,borderRadius:12,border:"none",cursor:"pointer",padding:"8px 4px",
+                background:showNames?"linear-gradient(135deg,#fff9c4,#ffe082)":"linear-gradient(135deg,#fafafa,#eee)",
+                fontSize:12,fontWeight:700,color:showNames?"#b45309":"#aaa",
+                boxShadow:showNames?"0 2px 8px #ffd16644":"none",transition:"all .2s"}}>
+                {showNames?"🏷️ Nume":"🏷️ Fără"}
+              </button>
+            </div>
+          </div>}
+
+          <div style={{overflowY:"auto",flex:1,padding:"0 8px 14px"}}>
+            {sideOpen&&<div style={{fontSize:9,fontWeight:700,letterSpacing:2,textTransform:"uppercase",margin:"4px 4px 7px",padding:"4px 0",
+              background:"linear-gradient(135deg,#f5c842,#ff6b9d)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>✨ Povești</div>}
+            {Object.values(WORLDS).map(w=>(
+              <button key={w.id} onClick={()=>setGame(w.id)} style={{
+                width:"100%",marginBottom:7,borderRadius:18,border:"none",cursor:"pointer",
+                padding:sideOpen?"13px 13px":"13px 0",display:"flex",alignItems:"center",
+                gap:sideOpen?10:0,justifyContent:sideOpen?"flex-start":"center",
+                background:game===w.id?`linear-gradient(135deg,${w.color}dd,${w.color}99)`:"rgba(255,255,255,0.65)",
+                boxShadow:game===w.id?`0 4px 20px ${w.color}55`:"0 2px 6px rgba(0,0,0,0.05)",transition:"all .2s"}}>
+                <div style={{width:44,height:44,borderRadius:14,flexShrink:0,
+                  background:game===w.id?"rgba(255,255,255,0.22)":"rgba(0,0,0,0.04)",
+                  display:"flex",alignItems:"center",justifyContent:"center",fontSize:22}}>{w.emoji}</div>
+                {sideOpen&&<div style={{textAlign:"left"}}>
+                  <div style={{fontSize:13,fontWeight:900,color:game===w.id?"#fff":"#1a1a2e",fontFamily:"'Fredoka One',cursive"}}>{w.title}</div>
+                  <div style={{fontSize:10,color:game===w.id?"rgba(255,255,255,.85)":"#999"}}>{w.heroes.slice(0,5).map(h=>h.emoji).join(" ")}</div>
+                </div>}
+              </button>
+            ))}
+
+            {sideOpen&&<div style={{fontSize:9,fontWeight:700,letterSpacing:2,color:"#888",textTransform:"uppercase",margin:"8px 4px 7px"}}>🎮 Jocuri clasice</div>}
+            {CLASSIC_GAMES.map(g=>(
+              <button key={g.id} onClick={()=>setGame(g.id)} style={{
+                width:"100%",marginBottom:7,borderRadius:18,border:"none",cursor:"pointer",
+                padding:sideOpen?"12px 13px":"12px 0",display:"flex",alignItems:"center",
+                gap:sideOpen?10:0,justifyContent:sideOpen?"flex-start":"center",
+                background:game===g.id?`linear-gradient(135deg,${g.color}cc,${g.color}88)`:"rgba(255,255,255,0.65)",
+                boxShadow:game===g.id?`0 4px 18px ${g.color}44`:"0 2px 6px rgba(0,0,0,0.05)",transition:"all .2s"}}>
+                <div style={{width:40,height:40,borderRadius:12,flexShrink:0,
+                  background:game===g.id?"rgba(255,255,255,0.22)":"rgba(0,0,0,0.04)",
+                  display:"flex",alignItems:"center",justifyContent:"center",fontSize:19}}>{g.emoji}</div>
+                {sideOpen&&<div style={{textAlign:"left"}}>
+                  <div style={{fontSize:12,fontWeight:900,color:game===g.id?"#fff":"#1a1a2e",fontFamily:"'Fredoka One',cursive"}}>{g.title}</div>
+                  <div style={{fontSize:10,color:game===g.id?"rgba(255,255,255,.85)":"#999"}}>{g.subtitle}</div>
+                </div>}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* ─── MAIN AREA ─── */}
+        <div style={{flex:1,display:"flex",flexDirection:"column",gap:11,minWidth:0}}>
+          <div style={{borderRadius:22,padding:"14px 20px",
+            background:"rgba(255,255,255,0.88)",backdropFilter:"blur(16px)",
+            boxShadow:"0 4px 24px rgba(0,0,0,0.08),inset 0 1px 0 rgba(255,255,255,0.9)",
+            border:"1.5px solid rgba(255,255,255,0.7)",
+            display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:10}}>
+            <div>
+              <div style={{fontSize:9,fontWeight:700,letterSpacing:2,color:gameColor,textTransform:"uppercase",marginBottom:2}}>
+                {gameEmoji} {gameTitle} · {D.emoji} {D.label}
+              </div>
+              <div key={message} className="msg-in" style={{fontSize:18,fontWeight:900,color:"#1a1a2e",fontFamily:"'Fredoka One',cursive"}}>{message}</div>
+            </div>
+            <div style={{display:"flex",gap:9,flexWrap:"wrap",alignItems:"center"}}>
+              {badge}
+              {stars>0&&<div style={{display:"flex",alignItems:"center",gap:6,background:"linear-gradient(135deg,#fff9c4,#ffe082)",borderRadius:15,padding:"8px 13px",boxShadow:"0 2px 12px #ffd16655"}}>
+                <span style={{fontSize:17}}>🏆</span>
+                <span style={{fontSize:17,fontWeight:900,color:"#b45309",fontFamily:"'Fredoka One',cursive"}}>{stars}</span>
+              </div>}
+            </div>
+          </div>
+
+          {/* CANVAS */}
+          <div ref={areaRef} onClick={tapArea}
+            onMouseDown={e=>beginHold(e.clientX,e.clientY)} onMouseUp={endHold} onMouseLeave={endHold}
+            onTouchStart={e=>{e.preventDefault();const t=e.touches?.[0];if(t)beginHold(t.clientX,t.clientY);}}
+            onTouchEnd={endHold} onTouchCancel={endHold}
+            className="canvas-area" style={{flex:1,minHeight:"62vh",position:"relative",overflow:"hidden",
+              borderRadius:28,touchAction:"none",userSelect:"none",cursor:"pointer",
+              border:"1.5px solid rgba(255,255,255,0.6)",
+              boxShadow:"0 12px 56px rgba(100,180,255,0.16),inset 0 1px 0 rgba(255,255,255,0.8)",
+              background:skyBg,transition:"background 1.2s"}}>
+
+            <div style={{position:"absolute",inset:0,background:"radial-gradient(ellipse at 50% 0%,rgba(255,255,255,0.45) 0%,transparent 60%)",pointerEvents:"none"}}/>
+
+            {/* sun or moon — NO stars for elsa/snowwhite */}
+            {!isNight?(
+              <div style={{position:"absolute",top:14,right:22,width:52,height:52,borderRadius:"50%",
+                background:"radial-gradient(circle,#ffe680,#ffcc00,#ff9900)",
+                animation:"sun-p 3s ease-in-out infinite",pointerEvents:"none"}}/>
+            ):(
+              <div style={{position:"absolute",top:14,right:22,width:48,height:48,borderRadius:"50%",
+                background:"radial-gradient(circle,#fffde7,#fff9c4,#ffe082)",
+                animation:"moon-glow 4s ease-in-out infinite",pointerEvents:"none",
+                boxShadow:"0 0 20px rgba(255,240,180,.5)"}}/>
+            )}
+
+            {/* clouds (day only) */}
+            {!isNight&&[{l:"6%",t:"8%",s:1.1,a:"float-c",d:9},{l:"38%",t:"4%",s:.78,a:"float-c2",d:12},{l:"66%",t:"11%",s:1,a:"float-c",d:10}].map((c,i)=>(
+              <div key={i} style={{position:"absolute",left:c.l,top:c.t,fontSize:50*c.s,pointerEvents:"none",opacity:.8,
+                animation:`${c.a} ${c.d}s ease-in-out infinite`,animationDelay:`${i*1.8}s`}}>☁️</div>
+            ))}
+
+            {/* ground */}
+            <div style={{position:"absolute",bottom:0,left:0,right:0,height:48,pointerEvents:"none",
+              background:isNight?"linear-gradient(0deg,rgba(30,30,80,.5),transparent)":"linear-gradient(0deg,rgba(100,180,40,.4),transparent)"}}/>
+            {W&&<div style={{position:"absolute",bottom:3,left:0,right:0,display:"flex",justifyContent:"space-around",pointerEvents:"none",fontSize:18,opacity:.88}}>
+              {W.ground.split("").map((f,i)=>(
+                <span key={i} style={{display:"inline-block",animation:`sway ${2.2+i*0.2}s ease-in-out infinite`,animationDelay:`${i*0.15}s`}}>{f}</span>
+              ))}
+            </div>}
+            {!W&&<div style={{position:"absolute",bottom:3,left:0,right:0,display:"flex",justifyContent:"space-around",pointerEvents:"none",fontSize:18,opacity:.88}}>
+              {"🌸🌼🌺🌻🌹🌷🌸🌼🌺🌻".split("").map((f,i)=>(
+                <span key={i} style={{display:"inline-block",animation:`sway ${2.2+i*0.22}s ease-in-out infinite`,animationDelay:`${i*0.18}s`}}>{f}</span>
+              ))}
+            </div>}
+
+            {celebrateType&&<CelebrateRain type={celebrateType}/>}
+
+            {/* ITEMS */}
+            {items.map(item=>{
+              const held=holdingId===item.id;
+              const sc=held?pressedScale:1;
+              const cm=COLOR_MAP[item.color];
+              return(
+                <button key={item.id}
+                  onClick={e=>{e.stopPropagation();handleItem(item);}}
+                  onTouchStart={e=>{e.stopPropagation();e.preventDefault();handleItem(item);}}
+                  className="item-in"
+                  style={{position:"absolute",left:item.x,top:item.y,
+                    transform:`translate(-50%,-50%) scale(${sc})`,transformOrigin:"center center",
+                    background:"none",border:"none",cursor:"pointer",padding:0,transition:"transform .08s",
+                    filter:held?`drop-shadow(0 0 20px ${item.render==="hero"?item.hero?.glow||"rgba(255,255,180,.7)":cm?.glow||"rgba(255,255,180,.7)"})`:"none",
+                    zIndex:10}}>
+                  {item.render==="hero"&&<HeroBubble hero={item.hero} size={item.size} held={held} showName={showNames}/>}
+                  {item.render==="emoji"&&(
+                    <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
+                      <div style={{width:item.size,height:item.size,borderRadius:"50%",
+                        background:"radial-gradient(circle at 35% 30%,rgba(255,255,255,0.65),rgba(255,255,255,0.1))",
+                        backdropFilter:"blur(3px)",border:"2px solid rgba(255,255,255,0.55)",
+                        boxShadow:"0 6px 22px rgba(0,0,0,0.14)",
+                        display:"flex",alignItems:"center",justifyContent:"center",fontSize:item.size*0.56}}>{item.emoji}</div>
+                      {showNames&&item.label&&(
+                        <div style={{padding:"2px 10px",borderRadius:12,
+                          background:"rgba(255,255,255,0.92)",backdropFilter:"blur(8px)",
+                          fontSize:Math.max(9,item.size*0.13),fontWeight:900,color:"#1a1a2e",
+                          fontFamily:"'Fredoka One',cursive",letterSpacing:0.3,
+                          boxShadow:"0 2px 8px rgba(0,0,0,0.12)",whiteSpace:"nowrap",
+                          textShadow:"none",border:"1px solid rgba(255,255,255,0.7)"}}>{item.label}</div>
+                      )}
+                    </div>
+                  )}
+                  {item.render==="balloon"&&(
+                    <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
+                      <Balloon color={item.color} size={item.size} held={held}/>
+                      {showNames&&item.label&&(
+                        <div style={{padding:"2px 10px",borderRadius:12,
+                          background:"rgba(255,255,255,0.92)",backdropFilter:"blur(8px)",
+                          fontSize:Math.max(9,item.size*0.13),fontWeight:900,color:"#1a1a2e",
+                          fontFamily:"'Fredoka One',cursive",letterSpacing:0.3,
+                          boxShadow:"0 2px 8px rgba(0,0,0,0.12)",whiteSpace:"nowrap",
+                          border:"1px solid rgba(255,255,255,0.7)"}}>{item.label}</div>
+                      )}
+                    </div>
+                  )}
+                  {item.render==="shape"&&(
+                    <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
+                      <Shape shape={item.shape} color={item.color} size={item.size-12}/>
+                      {showNames&&item.label&&(
+                        <div style={{padding:"2px 10px",borderRadius:12,
+                          background:"rgba(255,255,255,0.92)",backdropFilter:"blur(8px)",
+                          fontSize:Math.max(9,(item.size-12)*0.13),fontWeight:900,color:"#1a1a2e",
+                          fontFamily:"'Fredoka One',cursive",letterSpacing:0.3,
+                          boxShadow:"0 2px 8px rgba(0,0,0,0.12)",whiteSpace:"nowrap",
+                          border:"1px solid rgba(255,255,255,0.7)"}}>{item.label}</div>
+                      )}
+                    </div>
+                  )}
+                </button>
+              );
+            })}
+
+            {bursts.map(b=><Burst key={b.id} x={b.x} y={b.y} emoji={b.emoji}/>)}
+            {flashes.map(f=><Flash key={f.id} x={f.x} y={f.y} text={f.text}/>)}
+
+            <div style={{position:"absolute",bottom:54,left:12,display:"flex",alignItems:"center",gap:6,
+              background:"rgba(255,255,255,0.78)",backdropFilter:"blur(10px)",borderRadius:12,padding:"6px 12px",
+              fontSize:10,fontWeight:700,color:"#777",border:"1px solid rgba(255,255,255,0.6)"}}>
+              ❤️ Creat pentru degețele curioase și zâmbete mari
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
