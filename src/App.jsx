@@ -350,76 +350,366 @@ function CelebrateRain({type}){
 ══════════════════════════════════════════════════════ */
 
 /* ══════════════════════════════════════════════════════
-   FIREWORK SYSTEM — multiple types
+   FIREWORK SYSTEM — Ultra realistic
 ══════════════════════════════════════════════════════ */
-const FW_COLORS = ["#ff4d6d","#ffd166","#4895ef","#52b788","#c77dff","#ff6eb4","#f77f00","#00c9d4","#fff","#ff9f1c","#e9ff70"];
 
-// Type definitions
-const FW_TYPES = [
-  // 0: Classic burst — round explosion
-  { name:"classic",   count:[14,22], spread:1.0, speedMin:55, speedMax:150, duration:900,  emojis:["✨","⭐","💫","🌟","🔥","⚡"] },
-  // 1: Heart burst
-  { name:"heart",     count:[12,18], spread:1.0, speedMin:50, speedMax:130, duration:1000, emojis:["❤️","🧡","💛","💚","💙","💜","🩷","💕","💗"] },
-  // 2: Flower burst
-  { name:"flower",    count:[10,16], spread:1.0, speedMin:45, speedMax:120, duration:1100, emojis:["🌸","🌼","🌺","🌹","🌷","🌻","🪷"] },
-  // 3: Sparkle — many small particles going up
-  { name:"sparkle",   count:[20,30], spread:0.6, speedMin:30, speedMax:100, duration:800,  emojis:["✨","💫","⭐","🌟"] },
-  // 4: Rainbow ring — particles in a circle
-  { name:"rainbow",   count:[16,20], spread:1.0, speedMin:80, speedMax:80,  duration:1000, emojis:["🔴","🟠","🟡","🟢","🔵","🟣","⭐"] },
-  // 5: Stars
-  { name:"stars",     count:[12,20], spread:0.8, speedMin:60, speedMax:140, duration:950,  emojis:["⭐","🌟","💫","✨","🌠"] },
-  // 6: Confetti
-  { name:"confetti",  count:[18,28], spread:1.2, speedMin:40, speedMax:130, duration:1100, emojis:["🎊","🎉","🎈","🎀","🎆","🎇"] },
-  // 7: Emoji party
-  { name:"party",     count:[10,16], spread:1.0, speedMin:50, speedMax:120, duration:1000, emojis:["😊","🥳","🎉","🎊","🥰","😍","🤩","👏"] },
+const FW_PALETTES = [
+  { name:"red",     core:"#ffffff", mid:"#ffaa44", outer:"#ff2200", glow:"#ff440088" },
+  { name:"green",   core:"#ffffff", mid:"#aaffaa", outer:"#00cc44", glow:"#00ff4488" },
+  { name:"blue",    core:"#ffffff", mid:"#aaddff", outer:"#2266ff", glow:"#4488ff88" },
+  { name:"gold",    core:"#ffffff", mid:"#ffee88", outer:"#ffaa00", glow:"#ffcc0088" },
+  { name:"purple",  core:"#ffffff", mid:"#ddaaff", outer:"#aa00ff", glow:"#cc44ff88" },
+  { name:"silver",  core:"#ffffff", mid:"#eeeeff", outer:"#aabbcc", glow:"#ccddff88" },
+  { name:"orange",  core:"#ffffff", mid:"#ffcc88", outer:"#ff6600", glow:"#ff880088" },
+  { name:"cyan",    core:"#ffffff", mid:"#aaffff", outer:"#00ccff", glow:"#00eeff88" },
+  { name:"pink",    core:"#ffffff", mid:"#ffaadd", outer:"#ff44aa", glow:"#ff88cc88" },
+  { name:"rainbow", core:"#ffffff", mid:"#ffff88", outer:"#ff2200", glow:"#ff880088", rainbow:true },
 ];
 
-function FireworkBurst({x,y,id}){
-  const type = useMemo(()=>pick(FW_TYPES),[]);
-  const scale = useMemo(()=>rand(0.5,1.8),[]);  // size variation small/large
-  const count = useMemo(()=>Math.floor(rand(type.count[0],type.count[1])),[type]);
-  const flashSize = Math.round(40*scale);
+const RAINBOW_COLS = ["#ff2200","#ff8800","#ffee00","#44ff44","#0088ff","#8844ff","#ff44aa"];
 
-  const particles = useMemo(()=>Array.from({length:count},(_,i)=>{
-    let angle;
-    if(type.name==="rainbow"){
-      // perfect ring
-      angle = (i/count)*Math.PI*2;
-    } else {
-      // random spread
-      angle = rand(0, Math.PI*2);
-    }
-    const speed = rand(type.speedMin, type.speedMax) * scale;
-    const spread = type.spread;
-    return{
-      dx: Math.cos(angle)*speed*spread,
-      dy: Math.sin(angle)*speed*spread,
-      emoji: pick(type.emojis),
-      size: Math.round(rand(10,22)*scale),
-      delay: i*18,
+const EXPLOSION_TYPES = ["peony","chrysanthemum","willow","ring","heart","crossette","palm","spider"];
+
+/* ── useAnimationLoop hook ── */
+function useAnimLoop(cb, active=true){
+  const rafRef = React.useRef(null);
+  const cbRef  = React.useRef(cb);
+  cbRef.current = cb;
+  React.useEffect(()=>{
+    if(!active) return;
+    let t0 = null;
+    const loop = (ts) => {
+      if(!t0) t0=ts;
+      cbRef.current(ts-t0, ts);
+      rafRef.current = requestAnimationFrame(loop);
     };
-  }),[count,type,scale]);
+    rafRef.current = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(rafRef.current);
+  },[active]);
+}
+
+/* ── Canvas-based firework (much more performant & realistic) ── */
+function FireworkCanvas({fireworksList, canvasRef, speed=50}){
+  const cvRef = React.useRef(null);
+  // particles: [{x,y,vx,vy,life,maxLife,r,g,b,size,type,trail:[]}]
+  const particlesRef = React.useRef([]);
+  // rockets: [{x,y,vx,vy,targetX,targetY,exploded,palette,trail:[]}]
+  const rocketsRef   = React.useRef([]);
+  const prevFwRef    = React.useRef([]);
+
+  // Sync new fireworks → rockets
+  React.useEffect(()=>{
+    const prev = prevFwRef.current.map(f=>f.id);
+    fireworksList.forEach(fw=>{
+      if(!prev.includes(fw.id)){
+        const rect = canvasRef?.current?.getBoundingClientRect();
+        const startX = fw.x + rand(-30,30);
+        const startY = rect ? rect.bottom : window.innerHeight;
+        const pal    = fw.palette;
+        rocketsRef.current.push({
+          id: fw.id,
+          x: startX, y: startY,
+          targetX: fw.x, targetY: fw.y,
+          vx: 0, vy: 0,
+          palette: pal,
+          type: pick(EXPLOSION_TYPES),
+          scale: rand(0.5,1.9),
+          exploded: false,
+          trail: [],
+          age: 0,
+        });
+      }
+    });
+    prevFwRef.current = fireworksList;
+  },[fireworksList]);
+
+  // Resize canvas
+  React.useEffect(()=>{
+    const resize=()=>{
+      if(!cvRef.current) return;
+      cvRef.current.width  = window.innerWidth;
+      cvRef.current.height = window.innerHeight;
+    };
+    resize();
+    window.addEventListener("resize",resize);
+    return()=>window.removeEventListener("resize",resize);
+  },[]);
+
+  useAnimLoop((elapsed, ts)=>{
+    const cv = cvRef.current;
+    if(!cv) return;
+    const ctx = cv.getContext("2d");
+    const W = cv.width, H = cv.height;
+    const dt = Math.min(elapsed/1000, 0.05); // cap dt
+
+    // Fade background (motion blur effect)
+    ctx.fillStyle = "rgba(0,0,0,0.18)";
+    ctx.fillRect(0,0,W,H);
+
+    const speedScale = speed/50;
+    const GRAVITY = 160 * speedScale; // scales with speed
+    const DRAG    = 1 - (0.012 * speedScale);
+    const WIND    = 8;   // px/s horizontal drift
+
+    // ── UPDATE & DRAW ROCKETS ──
+    rocketsRef.current = rocketsRef.current.filter(r => {
+      if(r.exploded) return false;
+      r.age += dt;
+
+      // Ease toward target
+      const dx = r.targetX - r.x;
+      const dy = r.targetY - r.y;
+      const dist = Math.sqrt(dx*dx+dy*dy);
+
+      if(dist < 8){
+        // EXPLODE!
+        explodeRocket(r, particlesRef.current, speed);
+        return false;
+      }
+
+      const rocketSpeedMult = (speed/50); // speed prop: 1-100, 50=normal
+      const rocketSpeed = Math.min(dist * 4 * rocketSpeedMult, 900 * rocketSpeedMult);
+      r.vx += (dx/dist * rocketSpeed - r.vx) * 8 * dt;
+      r.vy += (dy/dist * rocketSpeed - r.vy) * 8 * dt;
+      r.x += r.vx * dt;
+      r.y += r.vy * dt;
+
+      // Trail
+      r.trail.push({x:r.x, y:r.y});
+      if(r.trail.length > 12) r.trail.shift();
+
+      // Draw trail
+      for(let i=0;i<r.trail.length;i++){
+        const alpha = i/r.trail.length;
+        const sz    = alpha * 3;
+        ctx.save();
+        ctx.globalAlpha = alpha*0.9;
+        ctx.fillStyle   = "#fff8cc";
+        ctx.shadowColor = "#fff8aa";
+        ctx.shadowBlur  = 8;
+        ctx.beginPath();
+        ctx.arc(r.trail[i].x, r.trail[i].y, sz, 0, Math.PI*2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // Draw rocket head
+      ctx.save();
+      ctx.globalAlpha = 1;
+      ctx.fillStyle   = "#ffffff";
+      ctx.shadowColor = "#ffffaa";
+      ctx.shadowBlur  = 14;
+      ctx.beginPath();
+      ctx.arc(r.x, r.y, 3, 0, Math.PI*2);
+      ctx.fill();
+      ctx.restore();
+
+      return true;
+    });
+
+    // ── UPDATE & DRAW PARTICLES ──
+    particlesRef.current = particlesRef.current.filter(p => {
+      p.life -= dt;
+      if(p.life <= 0) return false;
+
+      // Physics
+      p.vx += WIND  * dt * 0.1;
+      p.vy += GRAVITY * dt;
+      p.vx *= DRAG; // air drag
+      p.vy *= DRAG;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+
+      const lifeRatio = p.life / p.maxLife;
+
+      // Color: starts white-hot, cools to palette color
+      let col;
+      if(p.rainbow){
+        const cidx = Math.floor(p.rainbowIdx * RAINBOW_COLS.length);
+        col = hexToRgb(RAINBOW_COLS[cidx%RAINBOW_COLS.length]);
+      } else {
+        col = {r:p.r, g:p.g, b:p.b};
+      }
+
+      // White-hot core at start
+      const heat = Math.max(0, lifeRatio - 0.7) / 0.3;
+      const r_  = Math.round(col.r + (255-col.r)*heat);
+      const g_  = Math.round(col.g + (255-col.g)*heat);
+      const b_  = Math.round(col.b + (255-col.b)*heat);
+
+      const alpha = p.type==="glitter"
+        ? lifeRatio * rand(0.4,1.0)   // flicker
+        : Math.pow(lifeRatio,0.6);
+
+      const size = p.size * (p.type==="tail" ? lifeRatio : 1);
+
+      // Trail for main sparks
+      if(p.trail){
+        p.trail.push({x:p.x,y:p.y});
+        if(p.trail.length>6) p.trail.shift();
+        for(let i=0;i<p.trail.length;i++){
+          const ta = (i/p.trail.length) * alpha * 0.5;
+          ctx.save();
+          ctx.globalAlpha = ta;
+          ctx.fillStyle   = `rgb(${r_},${g_},${b_})`;
+          ctx.shadowColor = `rgba(${r_},${g_},${b_},0.6)`;
+          ctx.shadowBlur  = size*2;
+          ctx.beginPath();
+          ctx.arc(p.trail[i].x, p.trail[i].y, size*0.5, 0, Math.PI*2);
+          ctx.fill();
+          ctx.restore();
+        }
+      }
+
+      // Draw particle
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle   = `rgb(${r_},${g_},${b_})`;
+      ctx.shadowColor = `rgba(${r_},${g_},${b_},0.8)`;
+      ctx.shadowBlur  = size * 4;
+
+      if(p.type==="star"){
+        drawStar(ctx, p.x, p.y, size*1.5, size*0.6, 5);
+      } else if(p.type==="glitter"){
+        ctx.shadowBlur = size*6;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, size, 0, Math.PI*2);
+        ctx.fill();
+      } else {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, size, 0, Math.PI*2);
+        ctx.fill();
+      }
+      ctx.restore();
+
+      return true;
+    });
+
+  }, true);
 
   return(
-    <>
-      {/* Central flash */}
-      <div style={{position:"fixed",left:x,top:y,transform:"translate(-50%,-50%)",
-        width:flashSize,height:flashSize,borderRadius:"50%",
-        background:"radial-gradient(circle,rgba(255,255,255,0.98),rgba(255,255,220,0.7),transparent)",
-        animation:"fw-flash .4s ease-out both",pointerEvents:"none",zIndex:200}}/>
-      {/* Particles */}
-      {particles.map((p,i)=>(
-        <div key={i} style={{
-          position:"fixed",left:x,top:y,
-          fontSize:p.size,pointerEvents:"none",zIndex:199,
-          animation:`fw-particle ${type.duration}ms ease-out ${p.delay}ms both`,
-          "--dx":`${p.dx}px`,"--dy":`${p.dy}px`,
-        }}>{p.emoji}</div>
-      ))}
-    </>
+    <canvas ref={cvRef} style={{
+      position:"fixed",top:0,left:0,
+      width:"100%",height:"100%",
+      pointerEvents:"none",zIndex:195,
+      display: fireworksList.length>0||particlesRef.current.length>0?"block":"none",
+    }}/>
   );
 }
 
+/* ── Explode a rocket into particles ── */
+function explodeRocket(rocket, particles, speed=50){
+  const {x,y,palette,type,scale} = rocket;
+  const count = Math.round(rand(40,80)*scale);
+  const speedMult = speed/50; // 1.0 = normal
+  const baseSpeed = rand(90,220)*scale*speedMult;
+  const maxLife   = rand(1.0,2.2) / speedMult; // slower = particles last longer
+  const pal = palette;
+
+  for(let i=0;i<count;i++){
+    let vx,vy;
+
+    if(type==="peony"||type==="chrysanthemum"){
+      const a = (i/count)*Math.PI*2 + rand(-0.1,0.1);
+      const s = baseSpeed * rand(0.7,1.3);
+      vx = Math.cos(a)*s; vy = Math.sin(a)*s;
+    } else if(type==="willow"){
+      const a = (i/count)*Math.PI*2 + rand(-0.12,0.12);
+      const s = baseSpeed * rand(0.5,1.0);
+      vx = Math.cos(a)*s*0.8; vy = Math.sin(a)*s*0.5 + rand(20,60);
+    } else if(type==="ring"){
+      const a = (i/count)*Math.PI*2;
+      vx = Math.cos(a)*baseSpeed*0.9; vy = Math.sin(a)*baseSpeed*0.9;
+    } else if(type==="heart"){
+      const t = (i/count)*Math.PI*2;
+      const hx = 16*Math.pow(Math.sin(t),3);
+      const hy = -(13*Math.cos(t)-5*Math.cos(2*t)-2*Math.cos(3*t)-Math.cos(4*t));
+      const m  = Math.sqrt(hx*hx+hy*hy)||1;
+      vx = (hx/m)*baseSpeed*0.8; vy = (hy/m)*baseSpeed*0.8;
+    } else if(type==="crossette"){
+      const a = (i/count)*Math.PI*2 + rand(-0.2,0.2);
+      const s = baseSpeed * rand(0.4,1.5);
+      vx = Math.cos(a)*s; vy = Math.sin(a)*s;
+    } else if(type==="palm"){
+      const a = (i/count)*Math.PI*2;
+      vx = Math.cos(a)*baseSpeed*rand(0.3,1.0);
+      vy = Math.sin(a)*baseSpeed*rand(0.3,1.0) + rand(30,80);
+    } else if(type==="spider"){
+      const clusterAngle = Math.floor(i/(count/8)) * (Math.PI*2/8);
+      const a = clusterAngle + rand(-0.3,0.3);
+      const s = baseSpeed * rand(0.5,1.4);
+      vx = Math.cos(a)*s; vy = Math.sin(a)*s;
+    } else {
+      const a = rand(0,Math.PI*2);
+      vx = Math.cos(a)*baseSpeed*rand(0.2,1.2);
+      vy = Math.sin(a)*baseSpeed*rand(0.2,1.2);
+    }
+
+    const col = hexToRgb(i%7===0 ? pal.core : i%3===0 ? pal.mid : pal.outer);
+    const isRainbow = !!pal.rainbow;
+
+    particles.push({
+      x, y, vx, vy,
+      life: maxLife * rand(0.6,1.4),
+      maxLife,
+      r: col.r, g: col.g, b: col.b,
+      size: rand(1.5,4)*Math.sqrt(scale),
+      type: isRainbow ? "glitter" : (i%5===0?"star":"spark"),
+      rainbow: isRainbow,
+      rainbowIdx: i/count,
+      trail: [],
+    });
+  }
+
+  // Add glitter sparks (chrysanthemum / peony)
+  if(type==="chrysanthemum"||type==="peony"){
+    for(let i=0;i<Math.round(30*scale);i++){
+      const a = rand(0,Math.PI*2);
+      const s = rand(20,80)*scale;
+      const col = hexToRgb(pal.mid);
+      particles.push({
+        x:x+rand(-15,15), y:y+rand(-15,15),
+        vx:Math.cos(a)*s, vy:Math.sin(a)*s,
+        life:rand(0.5,1.2)/speedMult, maxLife:1.0/speedMult,
+        r:col.r, g:col.g, b:col.b,
+        size:rand(1,3)*Math.sqrt(scale),
+        type:"glitter", rainbow:false, trail:[],
+      });
+    }
+  }
+
+  // Flash burst
+  particles.push({
+    x,y,vx:0,vy:0,
+    life:0.15,maxLife:0.15,
+    r:255,g:255,b:255,
+    size:30*scale,
+    type:"flash",rainbow:false,trail:[],
+  });
+}
+
+/* ── helpers ── */
+function hexToRgb(hex){
+  hex = hex.replace("#","");
+  if(hex.length===3) hex=hex.split("").map(c=>c+c).join("");
+  const n=parseInt(hex,16);
+  return{r:(n>>16)&255,g:(n>>8)&255,b:n&255};
+}
+
+function drawStar(ctx,cx,cy,outerR,innerR,points){
+  ctx.beginPath();
+  for(let i=0;i<points*2;i++){
+    const r = i%2===0?outerR:innerR;
+    const a = (i/(points*2))*Math.PI*2 - Math.PI/2;
+    i===0 ? ctx.moveTo(cx+r*Math.cos(a),cy+r*Math.sin(a))
+           : ctx.lineTo(cx+r*Math.cos(a),cy+r*Math.sin(a));
+  }
+  ctx.closePath();
+  ctx.fill();
+}
+
+// Wrapper that manages fireworks list passed from App
+function FireworkBurst({x,y,id,canvasRef}){ return null; } // stub — canvas handles render
 
 
 export default function App(){
@@ -449,6 +739,8 @@ export default function App(){
   const [showNames,setShowNames]   = useState(false);
   const [isFullscreen,setIsFullscreen] = useState(false);
   const [fireworks,setFireworks]   = useState([]);
+  const [showFwHint,setShowFwHint] = useState(true);
+  const [fwSpeed,setFwSpeed]       = useState(50); // 1=slow ... 100=fast
 
   const areaRef  = useRef(null);
   const frameRef = useRef(null);
@@ -482,23 +774,23 @@ export default function App(){
 
   // ── FIREWORKS LOGIC ──
   const spawnFirework = useCallback((clientX, clientY)=>{
-    // Main burst
-    const id=uid();
-    setFireworks(p=>[...p,{id,x:clientX,y:clientY}]);
+    setShowFwHint(false);
     if(soundOn&&audioRef.current) audioRef.current.star?.();
-    setTimeout(()=>setFireworks(p=>p.filter(f=>f.id!==id)),1200);
 
-    // 1-3 secondary smaller bursts with slight delay
-    const extraCount = Math.floor(rand(1,4));
+    const addFw=(x,y)=>{
+      const id=uid();
+      setFireworks(p=>[...p,{id,x,y,palette:pick(FW_PALETTES)}]);
+      setTimeout(()=>setFireworks(p=>p.filter(f=>f.id!==id)),3500);
+    };
+
+    addFw(clientX,clientY);
+
+    // 0-2 extra rockets
+    const extraCount=Math.floor(rand(0,3));
     Array.from({length:extraCount}).forEach((_,i)=>{
-      const delay = 120 + i*180;
-      const extraId = uid();
-      const ox = clientX + rand(-80,80);
-      const oy = clientY + rand(-80,80);
       setTimeout(()=>{
-        setFireworks(p=>[...p,{id:extraId,x:ox,y:oy}]);
-        setTimeout(()=>setFireworks(p=>p.filter(f=>f.id!==extraId)),1200);
-      }, delay);
+        addFw(clientX+rand(-130,130), clientY+rand(-90,90));
+      }, 280+i*220+rand(0,120));
     });
   },[soundOn]);
 
@@ -553,7 +845,7 @@ export default function App(){
     else if(cur==="count"){ const n=Math.floor(rand(curD.count[0],curD.count[1])); setTargetCount(n); setMessage(`Sparge exact ${n} baloane!`); }
     else if(cur==="speed"){ setSpeedTime(25); setMessage("Prinde cât mai multe înainte să dispară!"); }
     else if(cur==="shapes"){ const s=pick(SHAPES); setTargetShape(s); setMessage(`Atinge ${shapeName(s)}!`); }
-    else if(cur==="fireworks") setMessage("Apasă ecranul sau Space pentru artificii! 🎆");
+    else if(cur==="fireworks"){ setMessage("Apasă ecranul sau Space pentru artificii! 🎆"); setShowFwHint(true); setTimeout(()=>setShowFwHint(false),2500); }
     else setMessage("Apasă sau ține apăsat ca să umpli cerul! 🎈");
   },[game,diff]);
 
@@ -578,7 +870,8 @@ export default function App(){
       if(e.code!=="Space") return;
       e.preventDefault();
       if(game==="fireworks"){
-        spawnFirework(rand(100,window.innerWidth-100), rand(100,window.innerHeight-100));
+        // Target upper 2/3 of screen so rocket has room to rise
+        spawnFirework(rand(80,window.innerWidth-80), rand(80,window.innerHeight*0.65));
       } else if(game==="free"){
         const rect=areaRef.current?.getBoundingClientRect();
         if(!rect) return;
@@ -707,7 +1000,7 @@ export default function App(){
   },[game,isStory,targetColor,targetAnimal,targetCount,targetShape,targetHero,streak,nextRound,nextStoryRound,wrongAction,addBurst,addFlash,play,doCelebrate,D,W]);
 
   const skyBg = game==="fireworks"
-    ? "linear-gradient(180deg,#0a0a1a 0%,#0d1b3e 30%,#1a1a4e 60%,#2d1b4e 100%)"
+    ? "linear-gradient(180deg,#000000 0%,#020208 30%,#050510 60%,#080818 100%)"
     : W ? W.sky
     : "linear-gradient(180deg,#7ec8e3 0%,#a8d8ea 22%,#c2ecf5 45%,#d4f7c9 72%,#a8d87c 100%)";
 
@@ -757,14 +1050,14 @@ export default function App(){
         .msg-in{animation:msg-in .3s ease-out}
 
         /* Fireworks */
-        @keyframes fw-flash{0%{opacity:1;transform:translate(-50%,-50%) scale(.2)}50%{opacity:1;transform:translate(-50%,-50%) scale(1.4)}100%{opacity:0;transform:translate(-50%,-50%) scale(2)}}
-        @keyframes fw-particle{0%{opacity:1;transform:translate(0,0) scale(1)}100%{opacity:0;transform:translate(var(--dx),var(--dy)) scale(.3)}}
 
         /* Heart cursor trail — handled by JS physics now */
 
 
         /* Fullscreen button pulse */
         @keyframes fs-pulse{0%,100%{opacity:.85}50%{opacity:1;transform:scale(1.05)}}
+        /* Fireworks hint fade */
+        @keyframes hint-fade{0%{opacity:1}70%{opacity:1}100%{opacity:0}}
 
         html,body{touch-action:manipulation;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;overscroll-behavior:none;}
         button{-webkit-tap-highlight-color:transparent;touch-action:manipulation;}
@@ -785,7 +1078,10 @@ export default function App(){
       `}</style>
 
       {/* Fireworks overlay */}
-      {fireworks.map(f=><FireworkBurst key={f.id} x={f.x} y={f.y} id={f.id}/>)}
+      <FireworkCanvas fireworksList={fireworks} canvasRef={areaRef} speed={fwSpeed}/>
+
+      {/* Fireworks Canvas — fixed overlay */}
+      <FireworkCanvas fireworksList={fireworks} canvasRef={areaRef} speed={fwSpeed}/>
 
       {/* Fullscreen button */}
       <button
@@ -920,6 +1216,29 @@ export default function App(){
             </div>
             <div style={{display:"flex",gap:9,flexWrap:"wrap",alignItems:"center"}}>
               {badge}
+              {/* Speed slider — only for fireworks */}
+              {game==="fireworks"&&(
+                <div style={{display:"flex",alignItems:"center",gap:8,
+                  background:"rgba(255,255,255,0.92)",backdropFilter:"blur(12px)",
+                  borderRadius:20,padding:"9px 16px",
+                  boxShadow:"0 4px 20px rgba(0,0,0,0.1)",
+                  border:"1.5px solid rgba(255,255,255,0.6)"}}>
+                  <span style={{fontSize:18}}>🐢</span>
+                  <div style={{display:"flex",flexDirection:"column",gap:3}}>
+                    <div style={{fontSize:9,fontWeight:700,letterSpacing:2,color:"#999",textTransform:"uppercase"}}>Viteză rachetă</div>
+                    <input
+                      type="range" min={5} max={100} step={5}
+                      value={fwSpeed}
+                      onChange={e=>setFwSpeed(Number(e.target.value))}
+                      style={{
+                        width:110, accentColor:"#ff6b9d",
+                        cursor:"pointer",height:6,
+                      }}
+                    />
+                  </div>
+                  <span style={{fontSize:18}}>🚀</span>
+                </div>
+              )}
               {stars>0&&<div style={{display:"flex",alignItems:"center",gap:6,background:"linear-gradient(135deg,#fff9c4,#ffe082)",borderRadius:15,padding:"8px 13px",boxShadow:"0 2px 12px #ffd16655"}}>
                 <span style={{fontSize:17}}>🏆</span>
                 <span style={{fontSize:17,fontWeight:900,color:"#b45309",fontFamily:"'Fredoka One',cursive"}}>{stars}</span>
@@ -929,7 +1248,14 @@ export default function App(){
 
           {/* CANVAS */}
           <div ref={areaRef} onClick={(e)=>{
-              if(game==="fireworks"){ spawnFirework(e.clientX,e.clientY); return; }
+              if(game==="fireworks"){
+              // If user clicks lower half, aim higher for better visual
+              const rect=areaRef.current?.getBoundingClientRect();
+              const relY=rect?e.clientY-rect.top:e.clientY;
+              const absY=relY>(rect?.height||window.innerHeight)*0.65
+                ? e.clientY - rand(100,200)
+                : e.clientY;
+              spawnFirework(e.clientX, absY); return; }
               tapArea(e);
             }}
             onMouseDown={e=>beginHold(e.clientX,e.clientY)} onMouseUp={endHold} onMouseLeave={endHold}
@@ -937,7 +1263,12 @@ export default function App(){
               e.preventDefault();
               const t=e.touches?.[0];
               if(!t) return;
-              if(game==="fireworks"){ spawnFirework(t.clientX,t.clientY); return; }
+              if(game==="fireworks"){
+                const rect2=areaRef.current?.getBoundingClientRect();
+                const relY2=rect2?t.clientY-rect2.top:t.clientY;
+                const absY2=relY2>(rect2?.height||window.innerHeight)*0.65
+                  ? t.clientY - rand(100,200) : t.clientY;
+                spawnFirework(t.clientX, absY2); return; }
               beginHold(t.clientX,t.clientY);
             }}
             onTouchEnd={endHold} onTouchCancel={endHold}
@@ -950,7 +1281,36 @@ export default function App(){
             <div style={{position:"absolute",inset:0,background:"radial-gradient(ellipse at 50% 0%,rgba(255,255,255,0.45) 0%,transparent 60%)",pointerEvents:"none"}}/>
 
             {/* sun or moon — NO stars for elsa/snowwhite */}
-            {!isNight?(
+            {game==="fireworks"?(
+              <>
+                {/* Moon */}
+                <div style={{position:"absolute",top:18,right:28,width:58,height:58,borderRadius:"50%",
+                  background:"radial-gradient(circle at 35% 35%,#fffde7,#fff9c4,#ffe082 70%,#e6c84a)",
+                  boxShadow:"0 0 28px rgba(255,240,150,.45),0 0 60px rgba(255,240,100,.2)",
+                  pointerEvents:"none",zIndex:2}}/>
+                {/* Moon craters */}
+                <div style={{position:"absolute",top:28,right:52,width:12,height:12,borderRadius:"50%",
+                  background:"rgba(180,160,60,.35)",pointerEvents:"none",zIndex:3}}/>
+                <div style={{position:"absolute",top:42,right:38,width:8,height:8,borderRadius:"50%",
+                  background:"rgba(180,160,60,.28)",pointerEvents:"none",zIndex:3}}/>
+                {/* Clouds (dark silhouette) */}
+                <div style={{position:"absolute",bottom:"18%",left:"5%",pointerEvents:"none",zIndex:2,opacity:.7}}>
+                  <div style={{width:160,height:45,borderRadius:"50%",background:"#111118",
+                    boxShadow:"30px -10px 0 20px #111118,60px -5px 0 15px #111118,90px 5px 0 10px #111118"}}/>
+                </div>
+                <div style={{position:"absolute",bottom:"12%",right:"8%",pointerEvents:"none",zIndex:2,opacity:.65}}>
+                  <div style={{width:120,height:35,borderRadius:"50%",background:"#0d0d15",
+                    boxShadow:"25px -8px 0 16px #0d0d15,50px -4px 0 12px #0d0d15"}}/>
+                </div>
+                <div style={{position:"absolute",bottom:"22%",left:"35%",pointerEvents:"none",zIndex:2,opacity:.55}}>
+                  <div style={{width:90,height:28,borderRadius:"50%",background:"#10101a",
+                    boxShadow:"20px -6px 0 12px #10101a,40px -3px 0 8px #10101a"}}/>
+                </div>
+                {/* City silhouette at bottom */}
+                <div style={{position:"absolute",bottom:0,left:0,right:0,height:60,pointerEvents:"none",zIndex:2,
+                  background:"#080810",clipPath:"polygon(0% 100%,0% 70%,3% 70%,3% 50%,5% 50%,5% 60%,7% 60%,7% 40%,9% 40%,9% 55%,11% 55%,11% 45%,13% 45%,13% 65%,15% 65%,15% 35%,17% 35%,17% 50%,19% 50%,19% 42%,21% 42%,21% 58%,25% 58%,25% 38%,27% 38%,27% 52%,30% 52%,30% 48%,33% 48%,33% 60%,36% 60%,36% 35%,38% 35%,38% 50%,41% 50%,41% 44%,43% 44%,43% 62%,47% 62%,47% 42%,49% 42%,49% 55%,52% 55%,52% 48%,55% 48%,55% 65%,58% 65%,58% 38%,60% 38%,60% 50%,63% 50%,63% 44%,65% 44%,65% 58%,68% 58%,68% 36%,70% 36%,70% 52%,73% 52%,73% 46%,76% 46%,76% 60%,79% 60%,79% 42%,81% 42%,81% 55%,84% 55%,84% 48%,87% 48%,87% 65%,90% 65%,90% 40%,92% 40%,92% 52%,95% 52%,95% 46%,97% 46%,97% 58%,100% 58%,100% 100%)"}}/>
+              </>
+            ):!isNight?(
               <div style={{position:"absolute",top:14,right:22,width:52,height:52,borderRadius:"50%",
                 background:"radial-gradient(circle,#ffe680,#ffcc00,#ff9900)",
                 animation:"sun-p 3s ease-in-out infinite",pointerEvents:"none"}}/>
@@ -984,19 +1344,23 @@ export default function App(){
 
             {celebrateType&&<CelebrateRain type={celebrateType}/>}
 
-            {/* Fireworks game instruction */}
-            {game==="fireworks"&&(
-              <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",
-                alignItems:"center",justifyContent:"center",pointerEvents:"none"}}>
-                <div style={{background:"rgba(255,255,255,0.18)",backdropFilter:"blur(12px)",
-                  borderRadius:28,padding:"28px 40px",textAlign:"center",
-                  border:"1.5px solid rgba(255,255,255,0.3)"}}>
-                  <div style={{fontSize:64,marginBottom:8}}>🎆</div>
+            {/* Fireworks game instruction — auto-hides */}
+            {game==="fireworks"&&showFwHint&&(
+              <div style={{
+                position:"absolute",inset:0,display:"flex",flexDirection:"column",
+                alignItems:"center",justifyContent:"center",pointerEvents:"none",
+                animation:"hint-fade 2.5s ease-out forwards",
+              }}>
+                <div style={{background:"rgba(10,10,30,0.75)",backdropFilter:"blur(14px)",
+                  borderRadius:28,padding:"24px 36px",textAlign:"center",
+                  border:"1.5px solid rgba(255,255,255,0.15)",
+                  boxShadow:"0 8px 40px rgba(0,0,0,0.5)"}}>
+                  <div style={{fontSize:56,marginBottom:6}}>🎆</div>
                   <div style={{fontSize:22,fontWeight:900,color:"#fff",fontFamily:"'Fredoka One',cursive",
-                    textShadow:"0 2px 12px rgba(0,0,0,0.4)"}}>Apasă oriunde!</div>
-                  <div style={{fontSize:15,color:"rgba(255,255,255,0.85)",marginTop:6,fontWeight:700}}>
-                    sau apasă <kbd style={{background:"rgba(255,255,255,0.25)",borderRadius:8,padding:"2px 10px",
-                    fontFamily:"monospace",fontSize:14}}>Space</kbd> pentru artificii
+                    textShadow:"0 2px 16px rgba(255,200,0,.5)"}}>Apasă oriunde!</div>
+                  <div style={{fontSize:14,color:"rgba(255,255,255,0.7)",marginTop:6,fontWeight:700}}>
+                    sau <kbd style={{background:"rgba(255,255,255,0.15)",borderRadius:8,padding:"2px 10px",
+                    fontFamily:"monospace",fontSize:13,border:"1px solid rgba(255,255,255,0.2)"}}>Space</kbd>
                   </div>
                 </div>
               </div>
