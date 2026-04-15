@@ -22,6 +22,56 @@ const COLOR_MAP = {
   pink:   { name:"Roz",        hex:"#ff6eb4", glow:"#ff6eb455", grad:"radial-gradient(circle at 30% 25%,#ffd6e8,#ff6eb4 55%,#c9006b)" },
   cyan:   { name:"Turcoaz",    hex:"#00c9d4", glow:"#00c9d455", grad:"radial-gradient(circle at 30% 25%,#b2f5f8,#00c9d4 55%,#006b73)" },
 };
+
+/* ══════════════════════════════════════════════════════
+   VISUAL THEMES — 4 Seasons
+══════════════════════════════════════════════════════ */
+const THEMES = {
+  spring: {
+    id:"spring", label:"Primăvară", emoji:"🌸",
+    appBg:"linear-gradient(160deg,#fff0f8,#f8f0ff 40%,#f0fff4)",
+    sky:"linear-gradient(180deg,#a8d8f0 0%,#c8eaff 25%,#e0f4ff 50%,#d4f7c9 75%,#a8e090 100%)",
+    sidebar:"rgba(255,245,255,0.88)",
+    msgBar:"rgba(255,245,255,0.90)",
+    ground:"🌸🌷🌺🦋🌸🌼🌷🌸🦋🌺",
+    sun:true, clouds:true,
+    textPrimary:"#2d1040", textSecondary:"#9966aa",
+    accent:"#ff6eb4",
+  },
+  summer: {
+    id:"summer", label:"Vară", emoji:"☀️",
+    appBg:"linear-gradient(160deg,#fff8e0,#fff0c0 40%,#e8fff0)",
+    sky:"linear-gradient(180deg,#1a8fd1 0%,#4eb8f0 20%,#87ceeb 45%,#c8f0a0 75%,#90d060 100%)",
+    sidebar:"rgba(255,252,220,0.90)",
+    msgBar:"rgba(255,252,220,0.92)",
+    ground:"🌻🌊🦎🌴🌻🌺🏖️🌴🦜🌻",
+    sun:true, clouds:true,
+    textPrimary:"#1a2e00", textSecondary:"#557722",
+    accent:"#ffcc00",
+  },
+  autumn: {
+    id:"autumn", label:"Toamnă", emoji:"🍂",
+    appBg:"linear-gradient(160deg,#fff4e8,#ffe8d0 40%,#fff0e0)",
+    sky:"linear-gradient(180deg,#c07840 0%,#e09050 20%,#f0b060 45%,#d4a870 70%,#a07840 100%)",
+    sidebar:"rgba(255,240,220,0.90)",
+    msgBar:"rgba(255,240,220,0.92)",
+    ground:"🍂🍁🍄🌰🍂🍁🦔🌾🍂🍁",
+    sun:true, clouds:false,
+    textPrimary:"#3d1a00", textSecondary:"#885522",
+    accent:"#f77f00",
+  },
+  winter: {
+    id:"winter", label:"Iarnă", emoji:"❄️",
+    appBg:"linear-gradient(160deg,#e8f4ff,#f0f8ff 40%,#e0eeff)",
+    sky:"linear-gradient(180deg,#b0c8e8 0%,#c8ddf0 25%,#deeeff 55%,#eef6ff 80%,#f5faff 100%)",
+    sidebar:"rgba(230,240,255,0.90)",
+    msgBar:"rgba(230,240,255,0.92)",
+    ground:"❄️⛄🌨️🦌❄️⛄🌨️❄️⛄🦌",
+    sun:false, clouds:true,
+    textPrimary:"#0a1a3e", textSecondary:"#4466aa",
+    accent:"#4895ef",
+  },
+};
 const COLORS = Object.keys(COLOR_MAP);
 const SHAPES = ["circle","square","triangle","star","heart","diamond"];
 
@@ -168,6 +218,7 @@ const CLASSIC_GAMES = [
   {id:"count",     title:"Numără",             emoji:"🔢", subtitle:"Sparge exact câte trebuie",     color:"#ffd166"},
   {id:"speed",     title:"Rapid!",             emoji:"⚡", subtitle:"Prinde tot ce zboară repede",  color:"#f77f00"},
   {id:"shapes",    title:"Forme",              emoji:"⭐", subtitle:"Găsește forma corectă",         color:"#ff4d6d"},
+  {id:"piano",     title:"Piano Magic",        emoji:"🎹", subtitle:"Cântă melodii colorate!",         color:"#7c4dff"},
 ];
 
 const rand = (a,b) => Math.random()*(b-a)+a;
@@ -196,6 +247,7 @@ function makeAudio(){
     oink:  ()=>{ beep(300,0.08,"sine",0.035); setTimeout(()=>beep(240,0.1,"sine",0.03),80); },
     ham:   ()=>{ beep(320,0.06,"triangle",0.03); setTimeout(()=>beep(280,0.08,"triangle",0.025),60); },
     hmm:   ()=>beep(240,0.1,"sine",0.025),
+    getCtx:()=>gc(),
     animal:(n)=>{
       const m={bambi:[640,820],ham:[320,280],miau:[520,660],"țup":[740,520],grr:[180,140],yip:[700,840],
                hmm:[240,220],cip:[980,1150],mac:[420,350],cirip:[900,1050],"hu-hu":[260,220],
@@ -704,6 +756,613 @@ function drawStar(ctx,cx,cy,outerR,innerR,points){
 // Wrapper that manages fireworks list passed from App
 function FireworkBurst({x,y,id,canvasRef}){ return null; } // stub — canvas handles render
 
+/* ══════════════════════════════════════════════════════
+   SPLASH SCREEN
+══════════════════════════════════════════════════════ */
+function SplashScreen({onDone}){
+  const [phase,setPhase]=React.useState(0); // 0=show, 1=fadeout
+  React.useEffect(()=>{
+    const t1=setTimeout(()=>setPhase(1),2200);
+    const t2=setTimeout(()=>onDone(),2800);
+    return()=>{ clearTimeout(t1); clearTimeout(t2); };
+  },[]);
+  return(
+    <div style={{
+      position:"fixed",inset:0,zIndex:99999,
+      display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",
+      background:"linear-gradient(135deg,#1a1a4e,#0d1b3e,#000020)",
+      opacity:phase===1?0:1, transition:"opacity .7s ease",
+      pointerEvents:phase===1?"none":"all",
+    }}>
+
+      {/* Logo */}
+      <div style={{
+        fontSize:90,marginBottom:8,
+        animation:"splash-bounce .6s ease-out",
+        filter:"drop-shadow(0 0 30px rgba(255,107,157,.8))",
+      }}>🎈</div>
+      <div style={{
+        fontFamily:"'Fredoka One',cursive",fontSize:52,fontWeight:900,
+        background:"linear-gradient(135deg,#ff6b9d,#ff8e53,#ffd166)",
+        WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",
+        animation:"splash-title .5s .2s ease-out both",
+        letterSpacing:2,
+      }}>Balonel</div>
+      <div style={{
+        color:"rgba(255,255,255,0.7)",fontSize:16,fontWeight:700,
+        marginTop:8,letterSpacing:3,textTransform:"uppercase",
+        animation:"splash-title .5s .4s ease-out both",
+      }}>Jocul magic ✨</div>
+      <div style={{
+        marginTop:32,display:"flex",gap:8,
+        animation:"splash-title .5s .6s ease-out both",
+      }}>
+        {["🦌","❄️","🐕","🔴","🐷","🍎"].map((e,i)=>(
+          <div key={i} style={{
+            fontSize:28,
+            animation:`splash-float ${1+i*0.15}s ease-in-out infinite alternate`,
+          }}>{e}</div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════
+   STAR CELEBRATION — special 10-star fireworks
+══════════════════════════════════════════════════════ */
+function StarCelebration(){
+  return(
+    <div style={{
+      position:"fixed",inset:0,zIndex:9000,
+      display:"flex",alignItems:"center",justifyContent:"center",
+      pointerEvents:"none",
+      animation:"star-celeb-fade 5s ease-out forwards",
+    }}>
+      {/* Confetti rain */}
+      {Array.from({length:40}).map((_,i)=>(
+        <div key={i} style={{
+          position:"absolute",
+          left:`${rand(0,100)}%`,top:"-5%",
+          fontSize:rand(20,36),
+          animation:`confetti-fall ${rand(1.5,3.5)}s ease-in ${rand(0,1.5)}s both`,
+        }}>{pick(["⭐","🌟","💫","✨","🏆","🎉","🎊","🥳","👑","💎","🌈","🎆"])}</div>
+      ))}
+      {/* Center message */}
+      <div style={{
+        background:"linear-gradient(135deg,rgba(255,215,0,.95),rgba(255,165,0,.95))",
+        borderRadius:32,padding:"28px 48px",textAlign:"center",
+        boxShadow:"0 8px 48px rgba(255,200,0,.5),0 0 80px rgba(255,200,0,.3)",
+        border:"3px solid rgba(255,255,255,.6)",
+        animation:"star-pop .5s cubic-bezier(.34,1.56,.64,1)",
+      }}>
+        <div style={{fontSize:56,marginBottom:4}}>🏆</div>
+        <div style={{fontFamily:"'Fredoka One',cursive",fontSize:32,color:"#fff",
+          textShadow:"0 2px 8px rgba(0,0,0,.3)"}}>10 Stele!</div>
+        <div style={{fontSize:16,color:"rgba(255,255,255,.9)",marginTop:4,fontWeight:700}}>
+          Ești un campion! 🌟
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════
+   PIANO MAGIC — Realistic sound engine + Animal mode
+══════════════════════════════════════════════════════ */
+
+/* ── Realistic Piano Sound Engine ──
+   Uses multiple oscillators + filters for warm piano tone:
+   - Triangle wave base (soft fundamental)
+   - Sine harmonic (2x freq, octave)
+   - Sine harmonic (3x freq, fifth)
+   - BiquadFilter lowpass for warmth
+   - ADSR envelope: fast attack, medium decay, sustain, slow release
+*/
+function playRealisticNote(audioCtx, freq, velocity=0.8, duration=1.8){
+  if(!audioCtx) return;
+  const now = audioCtx.currentTime;
+
+  // Master gain with ADSR
+  const master = audioCtx.createGain();
+  master.connect(audioCtx.destination);
+
+  // Lowpass filter for warmth
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = "lowpass";
+  filter.frequency.setValueAtTime(4000, now);
+  filter.frequency.exponentialRampToValueAtTime(1200, now + duration);
+  filter.Q.value = 0.8;
+  filter.connect(master);
+
+  // Reverb-like effect using delay
+  const delay = audioCtx.createDelay(0.5);
+  const delayGain = audioCtx.createGain();
+  delay.delayTime.value = 0.08;
+  delayGain.gain.value = 0.18;
+  delay.connect(delayGain);
+  delayGain.connect(master);
+
+  const addOsc = (type, freqMult, gainVal, decayMult=1) => {
+    const osc  = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = type;
+    osc.frequency.value = freq * freqMult;
+    // Add slight detune for richness
+    osc.detune.value = (Math.random()-0.5)*4;
+
+    // ADSR envelope
+    const attack  = 0.008;
+    const decay   = 0.12 * decayMult;
+    const sustain = gainVal * 0.6;
+    const release = duration * 0.7;
+
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(gainVal * velocity, now + attack);
+    gain.gain.exponentialRampToValueAtTime(sustain, now + attack + decay);
+    gain.gain.setValueAtTime(sustain, now + duration - release * 0.3);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+    osc.connect(gain);
+    gain.connect(filter);
+    gain.connect(delay); // send to reverb
+    osc.start(now);
+    osc.stop(now + duration + 0.1);
+  };
+
+  // Fundamental — triangle for soft attack
+  addOsc("triangle", 1,    0.38, 1.0);
+  // 2nd harmonic — sine, octave up, quieter
+  addOsc("sine",     2,    0.14, 0.6);
+  // 3rd harmonic — fifth
+  addOsc("sine",     3,    0.07, 0.4);
+  // 4th harmonic — very subtle brightness
+  addOsc("sine",     4,    0.04, 0.3);
+  // Sub — slight bass body
+  addOsc("sine",     0.5,  0.06, 1.2);
+
+  // Master ADSR
+  master.gain.setValueAtTime(0.55, now);
+  master.gain.setValueAtTime(0.55, now + duration * 0.7);
+  master.gain.exponentialRampToValueAtTime(0.0001, now + duration + 0.15);
+}
+
+/* ── Animal sounds for each key ── */
+const ANIMAL_KEYS = [
+  { label:"Do",  animal:"🐶", name:"Cățel",    sound:"dog",      color:"#ff4d6d" },
+  { label:"Re",  animal:"🐱", name:"Pisică",   sound:"cat",      color:"#ff8e53" },
+  { label:"Mi",  animal:"🐮", name:"Vacă",     sound:"cow",      color:"#ffd166" },
+  { label:"Fa",  animal:"🐷", name:"Purceluș", sound:"pig",      color:"#52b788" },
+  { label:"Sol", animal:"🐸", name:"Broască",  sound:"frog",     color:"#4895ef" },
+  { label:"La",  animal:"🦆", name:"Rățușcă",  sound:"duck",     color:"#c77dff" },
+  { label:"Si",  animal:"🦉", name:"Bufniță",  sound:"owl",      color:"#ff6eb4" },
+  { label:"Do²", animal:"🦁", name:"Leuț",     sound:"lion",     color:"#00c9d4" },
+];
+
+const PIANO_KEYS = [
+  {note:"C4", freq:261.6, color:"#ff4d6d", label:"Do",  key:"A"},
+  {note:"D4", freq:293.7, color:"#ff8e53", label:"Re",  key:"S"},
+  {note:"E4", freq:329.6, color:"#ffd166", label:"Mi",  key:"D"},
+  {note:"F4", freq:349.2, color:"#52b788", label:"Fa",  key:"F"},
+  {note:"G4", freq:392.0, color:"#4895ef", label:"Sol", key:"G"},
+  {note:"A4", freq:440.0, color:"#c77dff", label:"La",  key:"H"},
+  {note:"B4", freq:493.9, color:"#ff6eb4", label:"Si",  key:"J"},
+  {note:"C5", freq:523.3, color:"#00c9d4", label:"Do²", key:"K"},
+];
+
+const MELODIES = [
+  { name:"⭐ Twinkle Twinkle",      notes:[0,0,4,4,5,5,4,3,3,2,2,1,1,0,4,4,3,3,2,2,1,4,4,3,3,2,2,1,0,0,4,4,5,5,4,3,3,2,2,1,1,0], tempo:520 },
+  { name:"🐑 Baa Baa Black Sheep",  notes:[0,0,4,4,5,4,3,3,2,2,1,1,0], tempo:480 },
+  { name:"🎂 La Mulți Ani",          notes:[0,0,1,0,3,2,0,0,1,0,4,3,0,0,7,5,3,2,1,6,6,5,3,4,3], tempo:450 },
+  { name:"🎵 Mary Had a Little Lamb",notes:[2,1,0,1,2,2,2,1,1,1,2,4,4,2,1,0,1,2,2,2,1,1,2,1,0], tempo:480 },
+  { name:"🎠 London Bridge",         notes:[4,5,4,3,2,3,4,1,2,3,2,3,4,4,5,4,3,2,3,4,1,4,2,0], tempo:440 },
+  { name:"🌊 Ode to Joy",            notes:[2,2,3,4,4,3,2,1,0,0,1,2,2,1,1,2,2,3,4,4,3,2,1,0,0,1,2,1,0,0], tempo:400 },
+  { name:"🎪 Frère Jacques",         notes:[0,1,2,0,0,1,2,0,2,3,4,2,3,4,4,5,4,3,2,0,4,5,4,3,2,0,0,3,0,0,3,0], tempo:460 },
+  { name:"🎶 Für Elise",             notes:[7,6,7,6,7,4,6,5,3,0,1,3,4,5,7,6,7,6,7,4,6,5,3,0,1,3,4,2,0], tempo:360 },
+  { name:"🌟 Jingle Bells",          notes:[2,2,2,2,2,2,2,4,0,1,2,3,3,3,3,3,2,2,2,2,1,1,2,1,4], tempo:420 },
+  { name:"🎸 Happy Birthday",        notes:[0,0,1,0,3,2,0,0,1,0,4,3,0,0,7,5,3,2,1,6,6,5,3,4,3], tempo:380 },
+  { name:"🦢 Swan Lake (temă)",      notes:[4,3,4,5,4,3,2,0,2,4,3,2,1,3,2,1,0], tempo:340 },
+  { name:"🎭 Can Can",               notes:[4,4,4,3,4,5,4,3,2,0,2,4,3,2,1,0,1,2,3,4,5,4,3,4], tempo:300 },
+];
+
+const CELEBRATIONS = [
+  { emoji:"🎉", colors:["#ff6b9d","#ff8e53"], label:"Bravo!" },
+  { emoji:"⭐", colors:["#ffd166","#ffaa00"], label:"Super!" },
+  { emoji:"🏆", colors:["#f77f00","#ff4400"], label:"Campion!" },
+  { emoji:"🌟", colors:["#4895ef","#0055ff"], label:"Minunat!" },
+  { emoji:"🎊", colors:["#52b788","#00aa44"], label:"Felicitări!" },
+  { emoji:"🥳", colors:["#c77dff","#8800ff"], label:"Extraordinar!" },
+  { emoji:"💫", colors:["#ff8e53","#ff4400"], label:"Perfect!" },
+];
+
+function PianoGame({audioRef, soundOn}){
+  const [activeKey,setActiveKey]       = React.useState(null);
+  const [currentMelody,setCurrentMelody]=React.useState(0);
+  const [melodyProgress,setMelodyProgress]=React.useState(0);
+  const [mode,setMode]                 = React.useState("learn"); // "free"|"learn"|"animals"
+  const [celebration,setCelebration]   = React.useState(null);
+  const [noteParticles,setNoteParticles]=React.useState([]);
+  const [streak,setStreak]             = React.useState(0);
+  const [wrongKey,setWrongKey]         = React.useState(null);
+  const [autoPlay,setAutoPlay]         = React.useState(false);
+  const [lastAnimal,setLastAnimal]     = React.useState(null);
+  const autoPlayRef                    = React.useRef(null);
+  const audioLoadRef                   = React.useRef({});
+
+  const mel      = MELODIES[currentMelody];
+  const nextNote = mode==="learn" ? mel.notes[melodyProgress] : null;
+
+  // Get AudioContext
+  const getCtx = React.useCallback(()=>{
+    if(!audioRef.current) return null;
+    return audioRef.current.getCtx?.();
+  },[audioRef]);
+
+  // Play realistic piano note
+  const playPianoNote = React.useCallback((freq, velocity=0.85)=>{
+    if(!soundOn) return;
+    const ctx = getCtx();
+    if(ctx) playRealisticNote(ctx, freq, velocity, 1.8);
+  },[soundOn, getCtx]);
+
+  // Play animal sound via Audio element
+  const playAnimalSound = React.useCallback((soundKey)=>{
+    if(!soundOn) return;
+    const urls = {
+      dog:  "https://freeanimalsounds.org/wp-content/uploads/2017/07/Bluthund_jault.mp3",
+      cat:  "https://freeanimalsounds.org/wp-content/uploads/2017/07/katze_miau.mp3",
+      cow:  "https://freeanimalsounds.org/wp-content/uploads/2017/07/Rinder_muh.mp3",
+      pig:  "https://freeanimalsounds.org/wp-content/uploads/2017/07/schwein.mp3",
+      frog: "https://freeanimalsounds.org/wp-content/uploads/2017/08/frogs.mp3",
+      duck: "https://freeanimalsounds.org/wp-content/uploads/2017/07/Ente_quackt.mp3",
+      owl:  "https://freeanimalsounds.org/wp-content/uploads/2017/07/owl.mp3",
+      lion: "https://freeanimalsounds.org/wp-content/uploads/2017/07/Löwe.mp3",
+    };
+    try{
+      // Use cached Audio element
+      if(!audioLoadRef.current[soundKey]){
+        audioLoadRef.current[soundKey] = new Audio(urls[soundKey]);
+        audioLoadRef.current[soundKey].volume = 0.7;
+      }
+      const a = audioLoadRef.current[soundKey];
+      a.currentTime = 0;
+      a.play().catch(()=>{});
+    }catch(e){}
+  },[soundOn]);
+
+  // Auto-play melody preview
+  const previewMelody = React.useCallback(()=>{
+    if(autoPlay) return;
+    setAutoPlay(true);
+    let i=0;
+    const playNext=()=>{
+      if(i>=mel.notes.length){ setAutoPlay(false); return; }
+      const keyIdx = mel.notes[i];
+      setActiveKey(keyIdx);
+      playPianoNote(PIANO_KEYS[keyIdx%PIANO_KEYS.length].freq, 0.75);
+      setTimeout(()=>setActiveKey(null), mel.tempo*0.35);
+      i++;
+      autoPlayRef.current = setTimeout(playNext, mel.tempo);
+    };
+    playNext();
+  },[mel, autoPlay, playPianoNote]);
+
+  React.useEffect(()=>{
+    return()=>{ if(autoPlayRef.current) clearTimeout(autoPlayRef.current); };
+  },[]);
+
+  // Add floating note particle
+  const addParticle = (keyIdx, isAnimal=false)=>{
+    const key = PIANO_KEYS[keyIdx%PIANO_KEYS.length];
+    const aKey= ANIMAL_KEYS[keyIdx%ANIMAL_KEYS.length];
+    const id  = `${Date.now()}-${Math.random()}`;
+    setNoteParticles(p=>[...p.slice(-12),{
+      id,
+      color: key.color,
+      symbol: isAnimal ? aKey.animal : pick(["♪","♫","♩","♬","🎵","🎶"]),
+      x: 12 + (keyIdx/PIANO_KEYS.length)*76,
+    }]);
+    setTimeout(()=>setNoteParticles(p=>p.filter(n=>n.id!==id)), 1100);
+  };
+
+  const playKey = React.useCallback((keyIdx)=>{
+    if(autoPlay) return;
+    const key  = PIANO_KEYS[keyIdx%PIANO_KEYS.length];
+    const aKey = ANIMAL_KEYS[keyIdx%ANIMAL_KEYS.length];
+
+    setActiveKey(keyIdx);
+    setTimeout(()=>setActiveKey(k=>k===keyIdx?null:k), 220);
+    try{ navigator.vibrate?.(20); }catch(e){}
+
+    if(mode==="animals"){
+      playAnimalSound(aKey.sound);
+      setLastAnimal(aKey);
+      addParticle(keyIdx, true);
+      setTimeout(()=>setLastAnimal(null), 1800);
+      return;
+    }
+
+    // Piano mode
+    playPianoNote(key.freq);
+    addParticle(keyIdx, false);
+
+    if(mode==="learn"){
+      if(keyIdx===nextNote){
+        const next = melodyProgress+1;
+        setStreak(s=>s+1);
+        if(next >= mel.notes.length){
+          const celeb = pick(CELEBRATIONS);
+          setCelebration(celeb);
+          setMelodyProgress(0);
+          setStreak(0);
+          // Play victory arpeggio
+          [0,2,4,7].forEach((n,i)=>setTimeout(()=>{
+            playPianoNote(PIANO_KEYS[n].freq*1.5, 0.5);
+            addParticle(n);
+          }, i*120));
+          setTimeout(()=>setCelebration(null), 3800);
+        } else {
+          setMelodyProgress(next);
+        }
+      } else {
+        setWrongKey(keyIdx);
+        setTimeout(()=>setWrongKey(null), 350);
+        // Play short error tone
+        const ctx=getCtx();
+        if(ctx && soundOn){
+          const o=ctx.createOscillator();
+          const g=ctx.createGain();
+          o.type="sawtooth"; o.frequency.value=120;
+          g.gain.setValueAtTime(0.1,ctx.currentTime);
+          g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.18);
+          o.connect(g); g.connect(ctx.destination);
+          o.start(); o.stop(ctx.currentTime+0.18);
+        }
+      }
+    }
+  },[mode,nextNote,melodyProgress,mel,autoPlay,playPianoNote,playAnimalSound,getCtx,soundOn]);
+
+  // Keyboard support
+  React.useEffect(()=>{
+    const onKey=(e)=>{
+      if(e.repeat) return;
+      const idx=PIANO_KEYS.findIndex(k=>k.key===e.key.toUpperCase());
+      if(idx!==-1) playKey(idx);
+    };
+    window.addEventListener("keydown",onKey);
+    return()=>window.removeEventListener("keydown",onKey);
+  },[playKey]);
+
+  const progress = mode==="learn" ? (melodyProgress/mel.notes.length)*100 : 0;
+
+  return(
+    <div style={{
+      flex:1,display:"flex",flexDirection:"column",
+      background:"linear-gradient(180deg,#08001a 0%,#0d0030 50%,#050018 100%)",
+      borderRadius:28,overflow:"hidden",position:"relative",
+      border:"1.5px solid rgba(255,255,255,0.1)",
+      boxShadow:"0 12px 56px rgba(100,50,255,0.2)",
+    }}>
+
+      {/* Celebration overlay */}
+      {celebration&&(
+        <div style={{position:"absolute",inset:0,zIndex:50,
+          display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",
+          background:"rgba(0,0,0,0.65)",backdropFilter:"blur(8px)",
+          animation:"star-celeb-fade 3.8s ease-out forwards",pointerEvents:"none"}}>
+          {Array.from({length:22}).map((_,i)=>(
+            <div key={i} style={{position:"absolute",left:`${rand(5,95)}%`,top:"-5%",
+              fontSize:rand(18,34),
+              animation:`confetti-fall ${rand(1.2,3)}s ease-in ${rand(0,1.2)}s both`}}>
+              {pick(["🎵","🎶","🎹","🎊","🎉","⭐","💫","✨","♪","♫"])}
+            </div>
+          ))}
+          <div style={{
+            background:`linear-gradient(135deg,${celebration.colors[0]},${celebration.colors[1]})`,
+            borderRadius:28,padding:"28px 48px",textAlign:"center",
+            boxShadow:`0 8px 48px ${celebration.colors[0]}88`,
+            border:"2px solid rgba(255,255,255,.3)",
+            animation:"star-pop .45s cubic-bezier(.34,1.56,.64,1)",
+          }}>
+            <div style={{fontSize:68,marginBottom:6}}>{celebration.emoji}</div>
+            <div style={{fontFamily:"'Fredoka One',cursive",fontSize:36,color:"#fff",
+              textShadow:"0 2px 12px rgba(0,0,0,.4)"}}>{celebration.label}</div>
+            <div style={{fontSize:15,color:"rgba(255,255,255,.85)",marginTop:6,fontWeight:700}}>
+              Ai cântat complet {mel.name}! 🎹
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Header */}
+      <div style={{padding:"12px 14px 8px",borderBottom:"1px solid rgba(255,255,255,.07)",position:"relative",zIndex:2}}>
+        <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",marginBottom:8}}>
+          <button onClick={()=>{setMode("free");setMelodyProgress(0);}} style={{
+            borderRadius:12,border:"none",cursor:"pointer",padding:"8px 14px",
+            fontWeight:900,fontSize:12,fontFamily:"'Fredoka One',cursive",
+            background:mode==="free"?"linear-gradient(135deg,#ff6b9d,#ff8e53)":"rgba(255,255,255,0.08)",
+            color:"#fff"}}>🎵 Liber</button>
+          <button onClick={()=>{setMode("learn");setMelodyProgress(0);setStreak(0);}} style={{
+            borderRadius:12,border:"none",cursor:"pointer",padding:"8px 14px",
+            fontWeight:900,fontSize:12,fontFamily:"'Fredoka One',cursive",
+            background:mode==="learn"?"linear-gradient(135deg,#4895ef,#c77dff)":"rgba(255,255,255,0.08)",
+            color:"#fff"}}>🎓 Învață</button>
+          <button onClick={()=>{setMode("animals");}} style={{
+            borderRadius:12,border:"none",cursor:"pointer",padding:"8px 14px",
+            fontWeight:900,fontSize:12,fontFamily:"'Fredoka One',cursive",
+            background:mode==="animals"?"linear-gradient(135deg,#52b788,#00c9d4)":"rgba(255,255,255,0.08)",
+            color:"#fff"}}>🐾 Animale</button>
+          {mode==="learn"&&(
+            <button onClick={previewMelody} disabled={autoPlay} style={{
+              borderRadius:12,border:"none",cursor:autoPlay?"default":"pointer",padding:"8px 14px",
+              fontWeight:900,fontSize:12,fontFamily:"'Fredoka One',cursive",
+              background:autoPlay?"rgba(255,255,255,.04)":"linear-gradient(135deg,#52b788,#4895ef)",
+              color:autoPlay?"#444":"#fff",opacity:autoPlay?.5:1}}>
+              {autoPlay?"▶ Redare...":"▶ Ascultă"}
+            </button>
+          )}
+        </div>
+        {mode==="learn"&&(
+          <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+            <select value={currentMelody}
+              onChange={e=>{setCurrentMelody(Number(e.target.value));setMelodyProgress(0);setStreak(0);}}
+              style={{borderRadius:10,border:"none",padding:"7px 12px",flex:1,maxWidth:240,
+                background:"rgba(255,255,255,.1)",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+              {MELODIES.map((m,i)=>(
+                <option key={i} value={i} style={{background:"#0d0030"}}>{m.name}</option>
+              ))}
+            </select>
+            <div style={{flex:1,minWidth:80}}>
+              <div style={{fontSize:10,color:"rgba(255,255,255,.4)",marginBottom:3,fontWeight:700}}>
+                {melodyProgress}/{mel.notes.length} · 🔥{streak}
+              </div>
+              <div style={{height:5,background:"rgba(255,255,255,.08)",borderRadius:4,overflow:"hidden"}}>
+                <div style={{height:"100%",width:`${progress}%`,
+                  background:"linear-gradient(90deg,#4895ef,#c77dff)",
+                  borderRadius:4,transition:"width .15s"}}/>
+              </div>
+            </div>
+          </div>
+        )}
+        {mode==="animals"&&(
+          <div style={{color:"rgba(255,255,255,.5)",fontSize:12,fontWeight:700}}>
+            Atinge orice tastă și ascultă animalul! 🐾
+          </div>
+        )}
+      </div>
+
+      {/* Display area */}
+      <div style={{flex:1,position:"relative",overflow:"hidden",minHeight:100,
+        display:"flex",alignItems:"center",justifyContent:"center"}}>
+        {/* Floating particles */}
+        {noteParticles.map(p=>(
+          <div key={p.id} style={{
+            position:"absolute",left:`${p.x}%`,bottom:"15%",
+            fontSize:rand(18,28),color:p.color,pointerEvents:"none",
+            animation:"piano-note-float 1.1s ease-out both",
+            textShadow:`0 0 14px ${p.color}`,
+          }}>{p.symbol}</div>
+        ))}
+
+        {/* Next note */}
+        {mode==="learn"&&nextNote!==null&&!celebration&&(
+          <div style={{textAlign:"center",zIndex:2,pointerEvents:"none"}}>
+            <div style={{fontSize:10,color:"rgba(255,255,255,.35)",fontWeight:700,
+              textTransform:"uppercase",letterSpacing:2,marginBottom:4}}>Apasă nota</div>
+            <div style={{fontFamily:"'Fredoka One',cursive",fontSize:56,fontWeight:900,
+              color:PIANO_KEYS[nextNote%PIANO_KEYS.length].color,
+              animation:"bounce 0.65s ease-in-out infinite alternate",
+              textShadow:`0 0 30px ${PIANO_KEYS[nextNote%PIANO_KEYS.length].color}`,
+            }}>{PIANO_KEYS[nextNote%PIANO_KEYS.length].label}</div>
+            <div style={{fontSize:26,color:PIANO_KEYS[nextNote%PIANO_KEYS.length].color,
+              animation:"bounce 0.65s ease-in-out infinite alternate",marginTop:2}}>↓</div>
+          </div>
+        )}
+
+        {/* Animal display */}
+        {mode==="animals"&&lastAnimal&&(
+          <div style={{textAlign:"center",animation:"star-pop .3s cubic-bezier(.34,1.56,.64,1)"}}>
+            <div style={{fontSize:64}}>{lastAnimal.animal}</div>
+            <div style={{fontFamily:"'Fredoka One',cursive",fontSize:22,color:lastAnimal.color,
+              marginTop:4,textShadow:`0 0 20px ${lastAnimal.color}`}}>{lastAnimal.name}</div>
+          </div>
+        )}
+        {mode==="animals"&&!lastAnimal&&(
+          <div style={{color:"rgba(255,255,255,.15)",fontFamily:"'Fredoka One',cursive",fontSize:20,textAlign:"center"}}>
+            🐾 Apasă o tastă!
+          </div>
+        )}
+        {mode==="free"&&noteParticles.length===0&&(
+          <div style={{color:"rgba(255,255,255,.12)",fontFamily:"'Fredoka One',cursive",fontSize:18,textAlign:"center"}}>
+            🎹 Cântă liber!
+          </div>
+        )}
+      </div>
+
+      {/* Piano keys — AT THE BOTTOM */}
+      <div style={{padding:"0 8px 14px",
+        background:"linear-gradient(0deg,rgba(0,0,0,.5),transparent)",
+        position:"relative",zIndex:2}}>
+
+        {/* Next key indicator strip */}
+        {mode==="learn"&&nextNote!==null&&(
+          <div style={{height:3,borderRadius:4,marginBottom:5,background:"rgba(255,255,255,.05)",overflow:"hidden"}}>
+            <div style={{
+              height:"100%",
+              marginLeft:`${(nextNote/PIANO_KEYS.length)*100}%`,
+              width:`${(1/PIANO_KEYS.length)*100}%`,
+              background:PIANO_KEYS[nextNote%PIANO_KEYS.length].color,
+              borderRadius:4,
+              boxShadow:`0 0 8px ${PIANO_KEYS[nextNote%PIANO_KEYS.length].color}`,
+              transition:"all .12s",
+            }}/>
+          </div>
+        )}
+
+        <div style={{display:"flex",gap:4}}>
+          {(mode==="animals"?ANIMAL_KEYS:PIANO_KEYS).map((key,i)=>{
+            const pianoKey  = PIANO_KEYS[i];
+            const isActive  = activeKey===i;
+            const isNext    = mode==="learn"&&nextNote===i;
+            const isWrong   = wrongKey===i;
+            const keyColor  = key.color;
+
+            return(
+              <button key={i}
+                onMouseDown={()=>playKey(i)}
+                onTouchStart={e=>{e.preventDefault();playKey(i);}}
+                style={{
+                  flex:1,
+                  height: isNext ? 145 : 118,
+                  borderRadius:"6px 6px 14px 14px",
+                  border:"none",cursor:"pointer",
+                  background: isActive
+                    ? `linear-gradient(180deg,#ffffff 0%,${keyColor} 50%,${keyColor}cc 100%)`
+                    : isWrong
+                    ? "linear-gradient(180deg,#ff3333,#990000)"
+                    : isNext
+                    ? `linear-gradient(180deg,${keyColor}ff,${keyColor}88,${keyColor}44)`
+                    : `linear-gradient(180deg,rgba(255,255,255,.1),${keyColor}44,${keyColor}22)`,
+                  boxShadow: isActive
+                    ? `0 0 20px ${keyColor},0 0 40px ${keyColor}55,inset 0 2px 4px rgba(255,255,255,.6),0 4px 0 rgba(0,0,0,.5)`
+                    : isNext
+                    ? `0 0 14px ${keyColor}aa,0 0 28px ${keyColor}33,inset 0 1px 0 rgba(255,255,255,.15),0 5px 0 rgba(0,0,0,.5)`
+                    : `inset 0 1px 0 rgba(255,255,255,.06),0 5px 0 rgba(0,0,0,.6),0 2px 6px rgba(0,0,0,.5)`,
+                  border:`1.5px solid ${isActive?keyColor:isNext?keyColor:"rgba(255,255,255,.06)"}`,
+                  transform: isActive ? "translateY(4px) scale(0.98)" : "translateY(0) scale(1)",
+                  transition:"transform .07s, box-shadow .07s",
+                  display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-end",
+                  paddingBottom:8,gap:2,position:"relative",overflow:"hidden",
+                  animation:isNext&&!isActive?"key-pulse 1s ease-in-out infinite":"none",
+                }}>
+                {isActive&&(
+                  <div style={{position:"absolute",inset:0,borderRadius:"inherit",
+                    background:"radial-gradient(circle at 50% 20%,rgba(255,255,255,.7),transparent 65%)",
+                    pointerEvents:"none"}}/>
+                )}
+                {/* Animal emoji OR note name */}
+                {mode==="animals"
+                  ? <span style={{fontSize:22,position:"relative",zIndex:1}}>{key.animal}</span>
+                  : null
+                }
+                <span style={{fontSize:12,fontWeight:900,
+                  color:isActive?"#1a1a2e":"#fff",
+                  fontFamily:"'Fredoka One',cursive",
+                  textShadow:isActive?"none":`0 0 8px ${keyColor}`,
+                  position:"relative",zIndex:1}}>
+                  {mode==="animals"?key.name:key.label}
+                </span>
+                <span style={{fontSize:8,color:"rgba(255,255,255,.25)",
+                  position:"relative",zIndex:1}}>[{pianoKey.key}]</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 export default function App(){
   const [game,setGame]             = useState("free");
@@ -732,7 +1391,12 @@ export default function App(){
   const [showNames,setShowNames]   = useState(false);
   const [isFullscreen,setIsFullscreen] = useState(false);
   const [fireworks,setFireworks]   = useState([]);
-  const [showFwHint,setShowFwHint] = useState(true);
+  const [showFwHint,setShowFwHint]   = useState(true);
+  const [theme,setTheme]             = useState("spring");
+  const [showSplash,setShowSplash]   = useState(true);
+  const [starCelebration,setStarCelebration] = useState(false);
+  const [pianoKeys,setPianoKeys]     = useState([]); // active piano key flashes
+  const [gameTransition,setGameTransition]   = useState(false);
   const [fwSpeed,setFwSpeed]       = useState(50); // 1=slow ... 100=fast
 
   const areaRef  = useRef(null);
@@ -746,7 +1410,7 @@ export default function App(){
   const W = WORLDS[game] || null;
   const isStory = STORY_GAMES.includes(game);
   const selClassic = CLASSIC_GAMES.find(g=>g.id===game);
-  const isNight = game==="snowwhite" || game==="elsa" || game==="fireworks";
+  const isNight = game==="snowwhite" || game==="elsa" || game==="fireworks" || theme==="winter";
 
   // ── FULLSCREEN LOGIC ──
   const toggleFullscreen = useCallback(()=>{
@@ -839,7 +1503,15 @@ export default function App(){
   },[]);
 
   const doCelebrate=useCallback((txt,type="magic")=>{
-    setStars(s=>s+1); setMessage(txt); play("star");
+    setStars(s=>{
+      const next=s+1;
+      if(next>0 && next%10===0){
+        setStarCelebration(true);
+        setTimeout(()=>setStarCelebration(false),5000);
+      }
+      return next;
+    });
+    setMessage(txt); play("star");
     setPulse(true); setTimeout(()=>setPulse(false),700);
     setCelebrate(type); setTimeout(()=>setCelebrate(null),3000);
   },[play]);
@@ -864,6 +1536,7 @@ export default function App(){
     else if(cur==="speed"){ setSpeedTime(25); setMessage("Prinde cât mai multe înainte să dispară!"); }
     else if(cur==="shapes"){ const s=pick(SHAPES); setTargetShape(s); setMessage(`Atinge ${shapeName(s)}!`); }
     else if(cur==="fireworks"){ setMessage("Apasă ecranul sau Space pentru artificii! 🎆"); setShowFwHint(true); setTimeout(()=>setShowFwHint(false),2500); }
+    else if(cur==="piano") setMessage("🎹 Alege o melodie și învață să cânți!");
     else setMessage("Apasă sau ține apăsat ca să umpli cerul! 🎈");
   },[game,diff]);
 
@@ -877,7 +1550,7 @@ export default function App(){
 
   const spawnRandom=useCallback((n=1)=>{
     const rect=areaRef.current?.getBoundingClientRect(); if(!rect) return;
-    if(game==="fireworks") return;
+    if(game==="fireworks"||game==="piano") return;
     const newItems=Array.from({length:n},()=>makeItem(rand(85,rect.width-85),rand(rect.height*0.5,rect.height-105),game,diff)).filter(Boolean);
     setItems(p=>[...p,...newItems]);
   },[game,diff]);
@@ -957,7 +1630,11 @@ export default function App(){
     else if(game==="shapes"){ const s=pick(SHAPES); setTargetShape(s); setMessage(`Atinge ${shapeName(s)}!`); }
   },[game,D]);
 
+  // Vibration helper
+  const vibrate=(ms=40)=>{ try{ navigator.vibrate?.(ms); }catch(e){} };
+
   const handleItem=useCallback((item)=>{
+    vibrate(30);
     if(game==="free"){
       addBurst(item.x,item.y,"✨"); addFlash(item.x,item.y,item.label||"🎉");
       if(item.sound) play("animal",item.sound);
@@ -1017,10 +1694,11 @@ export default function App(){
     }
   },[game,isStory,targetColor,targetAnimal,targetCount,targetShape,targetHero,streak,nextRound,nextStoryRound,wrongAction,addBurst,addFlash,play,doCelebrate,D,W]);
 
+  const T = THEMES[theme] || THEMES.day;
   const skyBg = game==="fireworks"
     ? "linear-gradient(180deg,#000000 0%,#020208 30%,#050510 60%,#080818 100%)"
     : W ? W.sky
-    : "linear-gradient(180deg,#7ec8e3 0%,#a8d8ea 22%,#c2ecf5 45%,#d4f7c9 72%,#a8d87c 100%)";
+    : T.sky;
 
   const badge=useMemo(()=>{
     const bs={display:"flex",alignItems:"center",gap:10,background:"rgba(255,255,255,0.92)",backdropFilter:"blur(12px)",borderRadius:20,padding:"9px 16px",boxShadow:"0 4px 20px rgba(0,0,0,0.1)",border:"1.5px solid rgba(255,255,255,0.6)"};
@@ -1065,6 +1743,7 @@ export default function App(){
         @keyframes celebrate-fall{0%{opacity:1;transform:translateY(0) rotate(0deg)}100%{opacity:0;transform:translateY(115vh) rotate(360deg)}}
         @keyframes moon-glow{0%,100%{box-shadow:0 0 20px #fff4,0 0 40px #aaf4}50%{box-shadow:0 0 30px #fff6,0 0 60px #aaf6}}
         .item-in{animation:item-in .38s cubic-bezier(.34,1.56,.64,1) both}
+        .item-hero{animation:item-in .38s cubic-bezier(.34,1.56,.64,1) both,item-blink 4s 2s ease-in-out infinite}
         .msg-in{animation:msg-in .3s ease-out}
 
         /* Fireworks */
@@ -1076,6 +1755,28 @@ export default function App(){
         @keyframes fs-pulse{0%,100%{opacity:.85}50%{opacity:1;transform:scale(1.05)}}
         /* Fireworks hint fade */
         @keyframes hint-fade{0%{opacity:1}70%{opacity:1}100%{opacity:0}}
+        /* Splash screen */
+        @keyframes splash-bounce{0%{transform:scale(0) rotate(-20deg);opacity:0}70%{transform:scale(1.2) rotate(5deg)}100%{transform:scale(1) rotate(0deg);opacity:1}}
+        @keyframes splash-title{0%{opacity:0;transform:translateY(20px)}100%{opacity:1;transform:translateY(0)}}
+        @keyframes splash-float{from{transform:translateY(0)}to{transform:translateY(-12px)}}
+        @keyframes twinkle-splash{0%,100%{opacity:.5}50%{opacity:.8}}
+        /* Star celebration */
+        @keyframes confetti-fall{0%{transform:translateY(0) rotate(0deg);opacity:1}100%{transform:translateY(110vh) rotate(720deg);opacity:0}}
+        @keyframes star-celeb-fade{0%,80%{opacity:1}100%{opacity:0}}
+        @keyframes star-pop{0%{transform:scale(0.3);opacity:0}70%{transform:scale(1.15)}100%{transform:scale(1);opacity:1}}
+        /* Piano */
+        @keyframes piano-particle{0%{opacity:1;transform:translate(0,0) scale(1)}100%{opacity:0;transform:translate(var(--pdx,20px),var(--pdy,-60px)) scale(0.5)}}
+        @keyframes key-pulse{0%,100%{transform:translateY(0);box-shadow:0 0 10px currentColor}50%{transform:translateY(-3px);box-shadow:0 0 30px currentColor,0 0 60px currentColor}}
+        @keyframes piano-note-float{0%{opacity:1;transform:translateY(0) scale(1)}100%{opacity:0;transform:translateY(-80px) scale(1.4)}}
+        @keyframes bounce{from{transform:translateY(0)}to{transform:translateY(-8px)}}
+        /* Game transition */
+        @keyframes game-fade-in{0%{opacity:0;transform:scale(0.97)}100%{opacity:1;transform:scale(1)}}
+        @keyframes game-fade-out{0%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(0.97)}}
+        .game-transitioning{animation:game-fade-out .25s ease-out forwards}
+        .game-visible{animation:game-fade-in .3s ease-out both}
+        /* Micro-animations for items */
+        @keyframes item-wiggle{0%,100%{transform:translate(-50%,-50%) rotate(-3deg)}50%{transform:translate(-50%,-50%) rotate(3deg)}}
+        @keyframes item-blink{0%,90%,100%{opacity:1}92%,98%{opacity:0.3}}
 
         html,body{touch-action:manipulation;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;overscroll-behavior:none;}
         button{-webkit-tap-highlight-color:transparent;touch-action:manipulation;}
@@ -1120,19 +1821,19 @@ export default function App(){
       >{isFullscreen?"🗗":"⛶"}</button>
 
       <div style={{display:"flex",minHeight:"100dvh",minHeight:"100vh",padding:12,gap:12,height:"100dvh",height:"100vh",overflow:"hidden",
-        background:pulse?"radial-gradient(circle at 50% 50%,#fffde7,#ffefc0 50%,#f0f7ff)":"linear-gradient(160deg,#f0f7ff,#e8f4ff 40%,#f0fff4)",
+        background:pulse?"radial-gradient(circle at 50% 50%,#fffde7,#ffefc0 50%,#f0f7ff)":T.appBg,
         transition:"background .5s",fontFamily:"'Nunito',sans-serif"}} className="app-layout">
 
         {/* ─── SIDEBAR ─── */}
         <div style={{flexShrink:0,width:sideOpen?304:68,transition:"width .35s cubic-bezier(.34,1.2,.64,1)",
-          borderRadius:28,overflow:"hidden",background:"rgba(255,255,255,0.86)",backdropFilter:"blur(20px)",
+          borderRadius:28,overflow:"hidden",background:T.sidebar,backdropFilter:"blur(20px)",
           boxShadow:"0 8px 48px rgba(0,0,0,0.09),inset 0 1px 0 rgba(255,255,255,0.9)",
           border:"1.5px solid rgba(255,255,255,0.75)",display:"flex",flexDirection:"column"}}>
 
           <div style={{padding:"16px 12px 8px",display:"flex",alignItems:"center",justifyContent:sideOpen?"space-between":"center",gap:8}}>
             {sideOpen&&<div>
               <div style={{fontSize:9,fontWeight:700,letterSpacing:3,color:"#ff6b9d",textTransform:"uppercase"}}>Kids Play</div>
-              <div style={{fontSize:24,fontWeight:900,color:"#1a1a2e",fontFamily:"'Fredoka One',cursive",lineHeight:1.1}}>Balonel ✨</div>
+              <div style={{fontSize:24,fontWeight:900,color:T.textPrimary,fontFamily:"'Fredoka One',cursive",lineHeight:1.1}}>Balonel ✨</div>
             </div>}
             <button onClick={()=>setSideOpen(v=>!v)} style={{width:40,height:40,borderRadius:12,border:"none",cursor:"pointer",flexShrink:0,
               background:"linear-gradient(135deg,#ff6b9d,#ff8e53)",color:"#fff",fontSize:14,
@@ -1151,6 +1852,22 @@ export default function App(){
                   boxShadow:diff===k?"0 3px 12px #ff6b9d44":"none",transition:"all .2s",lineHeight:1.3}}>
                   {v.emoji}<br/>{k==="easy"?"2-3":k==="medium"?"4-5":"6+"}
                 </button>
+              ))}
+            </div>
+          </div>}
+
+          {sideOpen&&<div style={{padding:"0 12px 8px"}}>
+            <div style={{fontSize:9,fontWeight:700,letterSpacing:2,color:T.textSecondary,textTransform:"uppercase",marginBottom:6}}>Temă</div>
+            <div style={{display:"flex",gap:5}}>
+              {Object.values(THEMES).map(t=>(
+                <button key={t.id} onClick={()=>setTheme(t.id)} style={{
+                  flex:1,borderRadius:12,border:"none",cursor:"pointer",padding:"6px 2px",
+                  background:theme===t.id?`linear-gradient(135deg,${t.accent||"#ff6b9d"},${t.accent||"#ff8e53"}aa)`:"rgba(128,128,128,0.12)",
+                  color:theme===t.id?"#fff":T.textPrimary,
+                  fontSize:15,fontWeight:900,transition:"all .2s",
+                  boxShadow:theme===t.id?`0 3px 12px ${t.accent||"#ff6b9d"}44`:"none",
+                  display:"flex",flexDirection:"column",alignItems:"center",gap:1,lineHeight:1.2,
+                }}><span>{t.emoji}</span><span style={{fontSize:8,opacity:.8}}>{t.label.split(" ")[0]}</span></button>
               ))}
             </div>
           </div>}
@@ -1187,7 +1904,10 @@ export default function App(){
             {sideOpen&&<div style={{fontSize:9,fontWeight:700,letterSpacing:2,textTransform:"uppercase",margin:"4px 4px 7px",padding:"4px 0",
               background:"linear-gradient(135deg,#f5c842,#ff6b9d)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>✨ Povești</div>}
             {Object.values(WORLDS).map(w=>(
-              <button key={w.id} onClick={()=>setGame(w.id)} style={{
+              <button key={w.id} onClick={()=>{
+                setGameTransition(true);
+                setTimeout(()=>{ setGame(w.id); setGameTransition(false); },300);
+              }} style={{
                 width:"100%",marginBottom:7,borderRadius:18,border:"none",cursor:"pointer",
                 padding:sideOpen?"13px 13px":"13px 0",display:"flex",alignItems:"center",
                 gap:sideOpen?10:0,justifyContent:sideOpen?"flex-start":"center",
@@ -1205,7 +1925,10 @@ export default function App(){
 
             {sideOpen&&<div style={{fontSize:9,fontWeight:700,letterSpacing:2,color:"#888",textTransform:"uppercase",margin:"8px 4px 7px"}}>🎮 Jocuri clasice</div>}
             {CLASSIC_GAMES.map(g=>(
-              <button key={g.id} onClick={()=>setGame(g.id)} style={{
+              <button key={g.id} onClick={()=>{
+                setGameTransition(true);
+                setTimeout(()=>{ setGame(g.id); setGameTransition(false); },300);
+              }} style={{
                 width:"100%",marginBottom:7,borderRadius:18,border:"none",cursor:"pointer",
                 padding:sideOpen?"12px 13px":"12px 0",display:"flex",alignItems:"center",
                 gap:sideOpen?10:0,justifyContent:sideOpen?"flex-start":"center",
@@ -1226,7 +1949,7 @@ export default function App(){
         {/* ─── MAIN AREA ─── */}
         <div style={{flex:1,display:"flex",flexDirection:"column",gap:11,minWidth:0}}>
           <div style={{borderRadius:22,padding:"14px 20px",
-            background:"rgba(255,255,255,0.88)",backdropFilter:"blur(16px)",
+            background:T.msgBar,backdropFilter:"blur(16px)",
             boxShadow:"0 4px 24px rgba(0,0,0,0.08),inset 0 1px 0 rgba(255,255,255,0.9)",
             border:"1.5px solid rgba(255,255,255,0.7)",
             display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:10}}>
@@ -1294,7 +2017,7 @@ export default function App(){
               beginHold(t.clientX,t.clientY);
             }}
             onTouchEnd={endHold} onTouchCancel={endHold}
-            className="canvas-area" style={{flex:1,minHeight:"62vh",position:"relative",overflow:"hidden",
+            className={`canvas-area game-visible ${gameTransition?"game-transitioning":""}`} style={{flex:1,minHeight:"62vh",position:"relative",overflow:"hidden",
               borderRadius:28,touchAction:"none",userSelect:"none",cursor:"pointer",
               border:"1.5px solid rgba(255,255,255,0.6)",
               boxShadow:"0 12px 56px rgba(100,180,255,0.16),inset 0 1px 0 rgba(255,255,255,0.8)",
@@ -1303,6 +2026,16 @@ export default function App(){
             <div style={{position:"absolute",inset:0,background:"radial-gradient(ellipse at 50% 0%,rgba(255,255,255,0.45) 0%,transparent 60%)",pointerEvents:"none"}}/>
 
             {/* sun or moon — NO stars for elsa/snowwhite */}
+            {/* Space theme planets */}
+            {theme==="space"&&game!=="fireworks"&&(
+              <>
+                <div style={{position:"absolute",top:"8%",left:"15%",fontSize:44,pointerEvents:"none",opacity:.6,animation:"splash-float 5s ease-in-out infinite"}}>🪐</div>
+                <div style={{position:"absolute",top:"5%",right:"30%",fontSize:28,pointerEvents:"none",opacity:.5,animation:"splash-float 7s ease-in-out infinite reverse"}}>🌍</div>
+                <div style={{position:"absolute",top:"15%",left:"50%",fontSize:20,pointerEvents:"none",opacity:.7}}>🛸</div>
+              </>
+            )}
+
+
             {game==="fireworks"?(
               <>
                 {/* Moon */}
@@ -1359,12 +2092,19 @@ export default function App(){
               ))}
             </div>}
             {!W&&<div style={{position:"absolute",bottom:3,left:0,right:0,display:"flex",justifyContent:"space-around",pointerEvents:"none",fontSize:18,opacity:.88}}>
-              {"🌸🌼🌺🌻🌹🌷🌸🌼🌺🌻".split("").map((f,i)=>(
+              {T.ground.split("").map((f,i)=>(
                 <span key={i} style={{display:"inline-block",animation:`sway ${2.2+i*0.22}s ease-in-out infinite`,animationDelay:`${i*0.18}s`}}>{f}</span>
               ))}
             </div>}
 
             {celebrateType&&<CelebrateRain type={celebrateType}/>}
+
+            {/* PIANO overlay inside canvas */}
+            {game==="piano"&&(
+              <div style={{position:"absolute",inset:0,zIndex:20}}>
+                <PianoGame audioRef={audioRef} soundOn={soundOn}/>
+              </div>
+            )}
 
             {/* Fireworks game instruction — auto-hides */}
             {game==="fireworks"&&showFwHint&&(
@@ -1397,7 +2137,7 @@ export default function App(){
                 <button key={item.id}
                   onClick={e=>{e.stopPropagation();handleItem(item);}}
                   onTouchStart={e=>{e.stopPropagation();e.preventDefault();handleItem(item);}}
-                  className="item-in"
+                  className={`item-in ${item.render==="hero"?"item-hero":""}`}
                   style={{position:"absolute",left:item.x,top:item.y,
                     transform:`translate(-50%,-50%) scale(${sc})`,transformOrigin:"center center",
                     background:"none",border:"none",cursor:"pointer",padding:0,transition:"transform .08s",
