@@ -1413,28 +1413,31 @@ export default function App(){
   const isNight = game==="snowwhite" || game==="elsa" || game==="fireworks" || theme==="winter";
 
   // ── FULLSCREEN LOGIC ──
-  const toggleFullscreen = useCallback(()=>{
+  // ── Fullscreen helpers ──
+  const enterFullscreen = useCallback(()=>{
     const el = document.documentElement;
-    const isFs = !!(
-      document.fullscreenElement ||
-      document.webkitFullscreenElement ||
-      document.mozFullScreenElement
-    );
-    if(!isFs){
-      // Enter fullscreen — try all vendor prefixes
-      if(el.requestFullscreen)           el.requestFullscreen();
+    try{
+      if(el.requestFullscreen)            el.requestFullscreen();
       else if(el.webkitRequestFullscreen) el.webkitRequestFullscreen();
       else if(el.mozRequestFullScreen)    el.mozRequestFullScreen();
       else if(el.msRequestFullscreen)     el.msRequestFullscreen();
-    } else {
-      // Exit fullscreen — try all vendor prefixes
+    }catch(e){}
+  },[]);
+
+  const exitFullscreen = useCallback(()=>{
+    try{
       if(document.exitFullscreen)            document.exitFullscreen();
       else if(document.webkitExitFullscreen) document.webkitExitFullscreen();
       else if(document.mozCancelFullScreen)  document.mozCancelFullScreen();
       else if(document.msExitFullscreen)     document.msExitFullscreen();
-    }
+    }catch(e){}
   },[]);
 
+  const toggleFullscreen = useCallback(()=>{
+    isFullscreen ? exitFullscreen() : enterFullscreen();
+  },[isFullscreen, enterFullscreen, exitFullscreen]);
+
+  // Sync state with actual fullscreen status
   useEffect(()=>{
     const handler=()=>{
       const isFs=!!(
@@ -1453,6 +1456,20 @@ export default function App(){
       document.removeEventListener("mozfullscreenchange",handler);
     };
   },[]);
+
+  // ── AUTO-ENTER FULLSCREEN on first load ──
+  useEffect(()=>{
+    // Small delay to allow browser to be ready
+    const t = setTimeout(()=>{
+      const alreadyFs=!!(
+        document.fullscreenElement||
+        document.webkitFullscreenElement||
+        document.mozFullScreenElement
+      );
+      if(!alreadyFs) enterFullscreen();
+    }, 800);
+    return()=>clearTimeout(t);
+  },[enterFullscreen]);
 
   // ── FIREWORKS LOGIC ──
   const spawnFirework = useCallback((clientX, clientY)=>{
@@ -1803,24 +1820,48 @@ export default function App(){
       <FireworkCanvas fireworksList={fireworks} canvasRef={areaRef} speed={fwSpeed}/>
 
       {/* Fullscreen button */}
-      <button
-        onClick={toggleFullscreen}
-        title={isFullscreen?"Ieși din fullscreen":"Fullscreen"}
-        style={{
-          position:"fixed",top:12,right:12,zIndex:10000,
-          width:48,height:48,borderRadius:14,border:"none",cursor:"pointer",
-          background:isFullscreen
-            ?"linear-gradient(135deg,#ff6b9d,#ff8e53)"
-            :"rgba(255,255,255,0.92)",
-          backdropFilter:"blur(12px)",
-          boxShadow:`0 4px 18px ${isFullscreen?"rgba(255,107,157,0.4)":"rgba(0,0,0,0.18)"}`,
-          fontSize:22,display:"flex",alignItems:"center",justifyContent:"center",
-          transition:"all .25s",
-          color:isFullscreen?"#fff":"#333",
-        }}
-      >{isFullscreen?"🗗":"⛶"}</button>
+      {/* Fullscreen controls — always visible */}
+      <div style={{
+        position:"fixed", top:12, right:12, zIndex:10000,
+        display:"flex", flexDirection:"column", gap:6,
+      }}>
+        {/* Maximize button — shown when NOT fullscreen */}
+        {!isFullscreen&&(
+          <button
+            onClick={enterFullscreen}
+            title="Maximizează jocul"
+            style={{
+              width:52,height:52,borderRadius:16,border:"none",cursor:"pointer",
+              background:"linear-gradient(135deg,#4895ef,#3f37c9)",
+              backdropFilter:"blur(12px)",
+              boxShadow:"0 4px 20px rgba(72,149,239,0.5), 0 2px 8px rgba(0,0,0,0.3)",
+              fontSize:24,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",
+              color:"#fff",gap:1,transition:"all .2s",
+            }}>
+            <span>⛶</span>
+            <span style={{fontSize:8,fontWeight:900,letterSpacing:0.5,opacity:.9}}>MAX</span>
+          </button>
+        )}
+        {/* Minimize button — shown when IN fullscreen */}
+        {isFullscreen&&(
+          <button
+            onClick={exitFullscreen}
+            title="Minimizează jocul"
+            style={{
+              width:52,height:52,borderRadius:16,border:"none",cursor:"pointer",
+              background:"linear-gradient(135deg,#ff4d6d,#c9184a)",
+              backdropFilter:"blur(12px)",
+              boxShadow:"0 4px 20px rgba(255,77,109,0.5), 0 2px 8px rgba(0,0,0,0.3)",
+              fontSize:24,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",
+              color:"#fff",gap:1,transition:"all .2s",
+            }}>
+            <span>🗗</span>
+            <span style={{fontSize:8,fontWeight:900,letterSpacing:0.5,opacity:.9}}>MIN</span>
+          </button>
+        )}
+      </div>
 
-      <div style={{display:"flex",minHeight:"100dvh",minHeight:"100vh",padding:12,gap:12,height:"100dvh",height:"100vh",overflow:"hidden",
+      <div style={{display:"flex",minHeight:"100vh",padding:isFullscreen?8:12,gap:isFullscreen?8:12,height:"100vh",overflow:"hidden",
         background:pulse?"radial-gradient(circle at 50% 50%,#fffde7,#ffefc0 50%,#f0f7ff)":T.appBg,
         transition:"background .5s",fontFamily:"'Nunito',sans-serif"}} className="app-layout">
 
@@ -2194,10 +2235,24 @@ export default function App(){
             {bursts.map(b=><Burst key={b.id} x={b.x} y={b.y} emoji={b.emoji}/>)}
             {flashes.map(f=><Flash key={f.id} x={f.x} y={f.y} text={f.text}/>)}
 
-            <div style={{position:"absolute",bottom:54,left:12,display:"flex",alignItems:"center",gap:6,
-              background:"rgba(255,255,255,0.78)",backdropFilter:"blur(10px)",borderRadius:12,padding:"6px 12px",
-              fontSize:10,fontWeight:700,color:"#777",border:"1px solid rgba(255,255,255,0.6)"}}>
-              ❤️ Creat pentru degețele curioase și zâmbete mari
+            <div style={{position:"absolute",bottom:12,left:12,display:"flex",
+              alignItems:"center",gap:8,flexWrap:"wrap"}}>
+              <div style={{
+                background:"rgba(255,255,255,0.72)",backdropFilter:"blur(10px)",
+                borderRadius:12,padding:"5px 12px",
+                fontSize:10,fontWeight:700,color:"#777",
+                border:"1px solid rgba(255,255,255,0.5)"}}>
+                ❤️ Creat pentru degețele curioase și zâmbete mari
+              </div>
+              {isFullscreen&&(
+                <div style={{
+                  background:"rgba(0,0,0,0.35)",backdropFilter:"blur(10px)",
+                  borderRadius:12,padding:"5px 12px",
+                  fontSize:10,fontWeight:700,color:"rgba(255,255,255,0.6)",
+                  border:"1px solid rgba(255,255,255,0.15)"}}>
+                  ESC sau 🗗 pentru a ieși
+                </div>
+              )}
             </div>
           </div>
         </div>
